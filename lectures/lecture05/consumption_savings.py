@@ -8,7 +8,7 @@ from scipy.optimize import minimize_scalar
 
 def util(c, gamma):
     """
-    Compute per-period utility for given consumption.
+    Compute the per-period utility for given consumption.
 
     Parameters
     ----------
@@ -33,7 +33,7 @@ def util(c, gamma):
 
 def util_life_c1(c1, beta, gamma, y, r):
     """
-    Compute lifetime utility of consuming c1, with c2 following from the budget 
+    Compute the lifetime utility of consuming c1, with c2 following from budget 
     constraint.
 
     Parameters
@@ -112,7 +112,7 @@ def solve_cons_sav(beta, gamma, y1, y2, r):
     # Store optimal period-1 consumption
     c1_opt = res.x
 
-    # Recover implied optimal period-2 consumption from budget constraint
+    # Recover implied optimal period-2 consumption from the budget constraint
     c2_opt = (1+r) * (Y - c1_opt)
 
     # Recover maximized lifetime utility
