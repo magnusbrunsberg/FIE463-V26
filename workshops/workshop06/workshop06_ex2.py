@@ -54,7 +54,7 @@ def compute_labor_ex_demand(w, par: Parameters):
     # 1. compute labor demand, output, and profits using solve_firm()
     # 2. compute optimal consumption and labor supply using solve_hh()
     # 3. compute excess demand for labor
-    # 4. return excess demand
+    # 4. return excess demand for labor
 
 
 def compute_equilibrium(par):
@@ -74,10 +74,11 @@ def compute_equilibrium(par):
 
     # TODO:
     # 1. call root-finder to find equilibrium wage
-    # 2. compute and store equilibrium values from firm problem
-    # 3. compute and store equilibrium values from type-1 household problem
-    # 4. compute and store equilibrium values from type-2 household problem
-    # 5. return Equilibrium instance
+    # 2. Create an instance of the Equilibrium class to store equilibrium values
+    # 3. compute and store equilibrium values from firm problem (L, Y, Pi)
+    # 4. compute and store equilibrium values from type-1 household problem
+    # 5. compute and store equilibrium values from type-2 household problem
+    # 6. return Equilibrium instance
 
 
 def print_equilibrium(eq: Equilibrium):
@@ -118,7 +119,7 @@ def foc_error(x, par: Parameters):
     Compute errors in first-order conditions of the household problem
     for type 1 and type 2.
 
-    (for BONUS QUESTION)
+    (for advanced solution method ONLY)
 
     Parameters
     ----------
@@ -148,7 +149,7 @@ def compute_equilibrium_root(par):
     Compute the equilibrium of the model by running a root finder on
     the household's first-order conditions.
 
-    (for BONUS QUESTION)
+    (for advanced solution method ONLY)
 
     Parameters
     ----------
@@ -183,7 +184,8 @@ if __name__ == '__main__':
     # Print equilibrium quantities and prices
     print_equilibrium(eq)
 
-    # Use root finder based on households' first-order conditions (bonus question)
+    # Use root finder based on households' first-order conditions 
+    # (advanced solution method)
     eq_ = compute_equilibrium_root(par)
     print('\nEquilibrium computed using root finder:')
     print_equilibrium(eq_)

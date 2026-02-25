@@ -140,7 +140,7 @@ def compute_labor_ex_demand(w, par: Parameters):
     # 1. compute labor demand, output, and profits using solve_firm()
     # 2. compute optimal consumption and labor supply using solve_hh()
     # 3. compute excess demand for labor
-    # 4. return excess demand
+    # 4. return excess demand for labor
 
 
 def compute_equilibrium(par):
@@ -160,9 +160,10 @@ def compute_equilibrium(par):
 
     # TODO:
     # 1. call root-finder to find equilibrium wage
-    # 2. compute and store equilibrium values from firm problem
-    # 3. compute and store equilibrium values from household problem
-    # 4. return Equilibrium instance
+    # 2. Create an instance of the Equilibrium class to store equilibrium values
+    # 3. compute and store equilibrium values from firm problem (L, Y, Pi)
+    # 4. compute and store equilibrium values from household problem (c, h)
+    # 5. return Equilibrium instance
 
 
 def print_equilibrium(eq: Equilibrium):
