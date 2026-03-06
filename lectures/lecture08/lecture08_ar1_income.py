@@ -24,6 +24,8 @@ def simulate_wealth_ar1_income(par: Parameters, a0, T, N, rng=None):
     """
     Simulate the evolution of wealth over time if income follows an AR(1).
 
+    The functions return T+1 values for each household, including the initial value.
+
     Parameters
     ----------
     par : Parameters
@@ -32,7 +34,7 @@ def simulate_wealth_ar1_income(par: Parameters, a0, T, N, rng=None):
     T : int
         Number of time periods to simulate.
     N : int
-        Number of individuals to simulate.
+        Number of households to simulate.
     rng : numpy.random.Generator, optional
         A random number generator instance.
 
@@ -51,7 +53,7 @@ def simulate_wealth_ar1_income(par: Parameters, a0, T, N, rng=None):
     # Compute mean log income
     log_y_mean = par.mu_y/(1-par.rho)
 
-    # Assume that all individuals start with the same income
+    # Assume that all households start with the same income
     log_y = np.full(N, fill_value=log_y_mean)
 
     a_sim = np.zeros((T+1, N))
