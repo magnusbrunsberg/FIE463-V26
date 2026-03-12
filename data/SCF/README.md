@@ -15,7 +15,7 @@ See [official website](https://www.federalreserve.gov/econres/scfindex.htm) for 
     4.  `female`: Indicator whether household head is female
     5.  `married`: Indicator for married/cohabiting household
     6.  `educ`: Education level (1 = no high school/GED, 2 = high school or GED,
-            3 = some college or Assoc. degree, 4 = Bachelors degree or higher)
+            3 = some college or Assoc. degree, 4 = Bachelor's degree or higher)
     7.  `empl`: Employment status: (1 = working for someone else, 2 = self-employed, 
             3 = retired/disabled, 4 = out of the labor force and other non-working)
     8.  `income`: Total household income from all sources
