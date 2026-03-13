@@ -13,15 +13,18 @@ class Parameters:
     """
     Container to store model parameters
     """
-    s: float = 0.75                     # Exogenous savings rate
-    R: float = 1.1                      # Gross return
-    sigma_y: float = 0.1                # Standard deviation of log income
-    mu_y: float = -sigma_y**2.0/2.0     # Mean of log income
+
+    s: float = 0.75         # Exogenous savings rate
+    R: float = 1.1          # Gross return
+    sigma_y: float = 0.1    # Standard deviation of log income
+    mu_y: float = -(sigma_y**2.0) / 2.0  # Mean of log income
 
 
 def simulate_wealth_iid_income(par: Parameters, a0, T, N, rng=None):
     """
     Simulate the evolution of wealth over time when income is IID.
+
+    The functions return T+1 values for each household, including the initial value.
 
     Parameters
     ----------
@@ -31,14 +34,13 @@ def simulate_wealth_iid_income(par: Parameters, a0, T, N, rng=None):
     T : int
         Number of time periods to simulate.
     N : int
-        Number of individuals to simulate.
+        Number of households to simulate.
     rng : numpy.random.Generator, optional
-        A random number generator instance.
 
     Returns
     -------
     a_sim : numpy.ndarray
-        A (T+1, N) array where each column represents the simulated wealth path of an household.
+        A (T+1, N) array where each column represents the simulated wealth path of a household.
     """
 
     if rng is None:
@@ -51,7 +53,7 @@ def simulate_wealth_iid_income(par: Parameters, a0, T, N, rng=None):
     y = np.exp(log_y)
 
     # Create array to store the simulated wealth paths
-    a_sim = np.zeros((T+1, N))
+    a_sim = np.zeros((T + 1, N))
 
     # Set initial value (identical for all households)
     a_sim[0] = a0
@@ -61,7 +63,7 @@ def simulate_wealth_iid_income(par: Parameters, a0, T, N, rng=None):
         # Savings out of beginning-of-period assets
         savings = par.s * a_sim[t]
         # Next-period assets
-        a_sim[t+1] = par.R * savings + y[t]
+        a_sim[t + 1] = par.R * savings + y[t]
 
     return a_sim
 
@@ -82,7 +84,7 @@ def compute_wealth_mean(par):
 
     # Mean of income (in levels)
     # Follows from the mean formula for the log-normal distribution
-    y_mean = np.exp(par.mu_y + par.sigma_y**2/2)
+    y_mean = np.exp(par.mu_y + par.sigma_y**2 / 2)
 
     # Mean of wealth
     a_mean = y_mean / (1 - par.s * par.R)
@@ -106,10 +108,10 @@ def compute_wealth_var(par):
 
     # Variance of income (in levels)
     # Follows from the variance formula for the log-normal distribution
-    y_var = np.exp(2*par.mu_y + par.sigma_y**2) * (np.exp(par.sigma_y**2) - 1)
+    y_var = np.exp(2 * par.mu_y + par.sigma_y**2) * (np.exp(par.sigma_y**2) - 1)
 
     # Variance of wealth
-    a_var = y_var / (1 - (par.s * par.R)**2.0)
+    a_var = y_var / (1 - (par.s * par.R) ** 2.0)
 
     return a_var
 
@@ -126,7 +128,7 @@ if __name__ == '__main__':
     assert par.R * par.s < 1
 
     # Mean of stationary INCOME distribution
-    y_mean = np.exp(par.mu_y + par.sigma_y**2/2)
+    y_mean = np.exp(par.mu_y + par.sigma_y**2 / 2)
 
     # Mean of stationary ASSET distribution
     a_mean = y_mean / (1 - par.s * par.R)
@@ -205,7 +207,7 @@ if __name__ == '__main__':
     ax2.set_xlabel('Period')
     ax2.legend(loc='lower right')
     plt.show()
-    
+
     # Select cross section from last simulated period
     last_cross_section = a_sim[-1]
 

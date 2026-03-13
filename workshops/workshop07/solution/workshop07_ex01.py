@@ -1,10 +1,9 @@
 """
-Lecture 7: Overlapping generations (OLG)
+Workshop 7: Overlapping generations (OLG)
+Exercise 1: Transitory vs persistent TFP changes
 
-This module implements the solution for the general equilibrium economy
-with overlapping generations where
-    - households choose consumption when young and old, and
-    - firms have a Cobb-Douglas production function using capital and labor.
+This module implements the solution for the steady state and transition
+dynamics of the OLG model assuming log utility.
 """
 
 from pathlib import Path
@@ -25,8 +24,9 @@ class Parameters:
     delta: float = 1.0  # Depreciation rate
     z: float = 1.0  # TFP
     beta: float = 0.96**30  # Discount factor (0.96 per year, 30-year periods)
-    gamma: float = 2.0  # RRA in utility
+    gamma: float = 1.0  # RRA in utility
     N: int = 1  # Number of households per cohort
+    kappa: float = 0.1  # Parameter for TFP shock persistence (used in scenario B)
 
 
 @dataclass
@@ -202,7 +202,6 @@ def compute_steady_state(par: Parameters):
 
     # Aggregate consumption
     C = par.N * (eq.c_y + eq.c_o)
-
     # Check that goods market clearing holds using Y = C + I
     assert abs(eq.Y - C - eq.I) < 1.0e-8
 
@@ -279,62 +278,66 @@ def initialize_sim(T, eq: SteadyState = None):
         sim.Y[0] = eq.Y
         sim.z[0] = eq.par.z
 
-    return sim 
+    return sim
 
 
-def simulate_olg(z_new, eq: SteadyState, T=10):
+def simulate_olg(z_series, eq: SteadyState):
     """
-    Simulate the transition dynamics of the OLG model.
+    Simulate the transition dynamics of the OLG model for a given TFP series.
+    This implementation assumes log utility (gamma=1).
 
     Parameters
     ----------
-    z_new : float
-        New level of TFP after the shock.
+    z_series : np.ndarray
+        Time series of TFP values
     eq : SteadyState
-        Initial steady-state equilibrium before the shock.
-    T : int
-        Number of periods to simulate.
+        Initial steady-state equilibrium
 
     Returns
     -------
     sim : Simulation
-        Simulation object containing the time series for each variable.
+        Simulation of the OLG model
     """
 
-    # Retrieve parameter object attached to steady-state equilibrium
+    # Retrieve parameter object
     par = eq.par
 
-    # The following code only works for log utility
+    # Check for log utility
     if par.gamma != 1:
-        raise ValueError('Simulation only implemented for log utility')
+        raise ValueError('simulate_olg only implemented for log utility')
 
-    # Initialize simulation instance and allocate arrays
+    # Number of periods to simulate
+    T = len(z_series) - 1
+
+    # Initialize simulation and allocate arrays
     sim = initialize_sim(T, eq)
 
-    # TFP is assumed to be at new level for all remaining periods
-    sim.z[1:] = z_new
+    # Set the TFP path
+    sim.z[:] = z_series
 
-    # Savings rate is independent of r for gamma = 1 and constant over time
+    # Savings rate is constant over time for log utility
     s = par.beta / (1 + par.beta)
     sim.s[:] = s
 
+    # Iterate through time periods
     for t in range(1, T + 1):
-        # Capital stock is predetermined by savings of old in previous period
+        # Capital stock is predetermined by savings in previous period
         sim.K[t] = sim.a[t - 1] * par.N
 
-        # Prices given predetermined capital stock and current z
+        # Compute factor prices given current K and current z
         sim.r[t], sim.w[t] = compute_prices(sim.K[t] / par.N, sim.z[t], par)
 
         # Savings by the young
         sim.a[t] = s * sim.w[t]
-        # Consumption by the young
+
+        # Consumption by the young and old
         sim.c_y[t] = (1 - s) * sim.w[t]
-        # Consumption by the old
         sim.c_o[t] = (1 + sim.r[t]) * sim.a[t - 1]
+
         # Aggregate output
         sim.Y[t] = sim.z[t] * sim.K[t] ** par.alpha * par.N ** (1 - par.alpha)
 
-        # Verify that goods market clearing holds
+        # Verify goods market clearing: Y + (1-delta)K = C + a*N
         demand = par.N * (sim.c_y[t] + sim.c_o[t] + sim.a[t])
         supply = sim.Y[t] + (1 - par.delta) * sim.K[t]
         assert abs(demand - supply) < 1.0e-8
@@ -342,7 +345,16 @@ def simulate_olg(z_new, eq: SteadyState, T=10):
     return sim
 
 
-def plot_simulation(eq, sim, eq_new=None, deviations=True, filename=None):
+def plot_simulation(
+    eq,
+    sim,
+    eq_new=None,
+    deviations=True,
+    eq_other=None,
+    sim_other=None,
+    labels=None,
+    filename=None,
+):
     """
     Plot the selected simulated time series of the OLG model.
 
@@ -357,24 +369,47 @@ def plot_simulation(eq, sim, eq_new=None, deviations=True, filename=None):
     deviations : bool
         If True, plot deviations from the initial steady state instead
         of absolute values.
+    eq_other : SteadyState, optional
+        Another steady-state equilibrium to plot for comparison.
+    sim_other : Simulation, optional
+        Another simulation to plot for comparison.
+    labels : list of str, optional
+        Labels for the different simulations.
     filename : str, optional
         If provided, save the figure to this location.
     """
 
     fig, axes = plt.subplots(
-        3,
-        2,
-        figsize=(6, 6),
+        nrows=4,
+        ncols=2,
+        figsize=(7, 7),
         sharex=True,
-        sharey='row' if deviations else False,
+        sharey=False,
         constrained_layout=True,
     )
 
+    if eq_other is None and sim_other is not None:
+        raise ValueError('sim_other provided without eq_other')
+    if eq_other is not None and sim_other is None:
+        raise ValueError('eq_other provided without sim_other')
+
     # Keyword arguments for time series plots
     kwargs = {
-        'marker': 'o' if len(sim.K) < 30 else None,
-        'markersize': 4,
         'color': 'steelblue',
+        'linestyle': '-',
+        'linewidth': 1.25,
+        'marker': 'o' if len(sim.K) < 30 else None,
+        'markersize': 2.5,
+    }
+    # Keyword arguments for time series plots of the other simulation (if provided)
+    kwargs_other = {
+        'color': 'darkred',
+        'linestyle': '-',
+        'linewidth': 1.0,
+        'marker': 'o' if len(sim.K) < 30 else None,
+        'markersize': 3.0,
+        'mfc': 'none',
+        'mew': 0.75,
     }
 
     # Keyword arguments for horizontal lines indicating (initial) steady state
@@ -398,78 +433,186 @@ def plot_simulation(eq, sim, eq_new=None, deviations=True, filename=None):
     else:
         ylabel = 'Deviation from SS' if deviations else None
 
-    # Plot TFP time series
-    yvalues = sim.z / eq.par.z - 1 if deviations else sim.z
-    axes[0, 0].plot(yvalues, label='Time series', **kwargs)
+    # Panel showing TFP time series
+    ax = axes[0, 0]
     # Horizontal line at old steady state
     yvalues = 0 if deviations else eq.par.z
-    axes[0, 0].axhline(yvalues, **kwargs_init)
+    ax.axhline(yvalues, **kwargs_init)
+    # Plot TFP time series
+    yvalues = sim.z / eq.par.z - 1 if deviations else sim.z
+    ymin, ymax = yvalues.min(), yvalues.max()
+    label = labels[0] if labels else 'Transition'
+    ax.plot(yvalues, label=label, **kwargs)
     # Horizontal line at new steady state
     if eq_new is not None:
         yvalues = eq_new.par.z / eq.par.z - 1 if deviations else eq_new.par.z
-        axes[0, 0].axhline(yvalues, **kwargs_new)
-    axes[0, 0].set_ylabel(ylabel)
-    axes[0, 0].set_title('TFP $z$')
+        ax.axhline(yvalues, **kwargs_new)
+    ax.set_ylabel(ylabel)
+    ax.set_title('TFP $z$')
+    if sim_other is not None:
+        yvalues = sim_other.z / eq_other.par.z - 1 if deviations else sim_other.z
+        label = labels[1] if labels else 'Other simulation'
+        ax.plot(yvalues, label=label, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
+    ax.legend(loc='lower right')
 
     # Plot output time series
+    ax = axes[0, 1]
     yvalues = sim.Y / eq.Y - 1 if deviations else sim.Y
-    axes[0, 1].plot(yvalues, **kwargs)
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(yvalues, **kwargs)
     # Horizontal line at old steady state
     yvalues = 0 if deviations else eq.Y
-    axes[0, 1].axhline(yvalues, **kwargs_init)
+    ax.axhline(yvalues, **kwargs_init)
     # Horizontal line at new steady state
     if eq_new is not None:
         yvalues = eq_new.Y / eq.Y - 1 if deviations else eq_new.Y
-        axes[0, 1].axhline(yvalues, **kwargs_new)
-    axes[0, 1].set_title('Output $Y$')
+        ax.axhline(yvalues, **kwargs_new)
+    ax.set_title('Output $Y$')
+    ax.set_ylabel(ylabel)
+    if sim_other is not None:
+        yvalues = sim_other.Y / eq_other.Y - 1 if deviations else sim_other.Y
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
 
     # Plot capital time series
+    ax = axes[1, 0]
     yvalues = sim.K / eq.K - 1 if deviations else sim.K
-    axes[1, 0].plot(yvalues, **kwargs)
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(yvalues, **kwargs)
     # Horizontal line at old steady state
     yvalues = 0 if deviations else eq.K
-    axes[1, 0].axhline(yvalues, **kwargs_init)
+    ax.axhline(yvalues, **kwargs_init)
     # Horizontal line at new steady state
     if eq_new is not None:
         yvalues = eq_new.K / eq.K - 1 if deviations else eq_new.K
-        axes[1, 0].axhline(yvalues, **kwargs_new)
-    axes[1, 0].set_title('Capital $K$')
-    axes[1, 0].set_ylabel(ylabel)
+        ax.axhline(yvalues, **kwargs_new)
+    ax.set_title('Capital $K$')
+    ax.set_ylabel(ylabel)
+    if sim_other is not None:
+        yvalues = sim_other.K / eq_other.K - 1 if deviations else sim_other.K
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
+
+    # Plot savings rate time series
+    ax = axes[1, 1]
+    # Plot savings rate in levels, not deviations
+    yvalues = sim.s
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(sim.s, **kwargs)
+    # Horizontal line at old steady state
+    ax.axhline(eq.s, **kwargs_init)
+    # Horizontal line at new steady state
+    if eq_new is not None:
+        ax.axhline(eq_new.s, **kwargs_new)
+    ax.set_title('Savings rate $s$')
+    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    if sim_other is not None:
+        yvalues = sim_other.s
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Handle cases where savings rate is nearly constant as this creates
+    # misleading plot ranges
+    if abs(ymin - ymax) < 0.05:
+        ymin, ymax = ymin - 0.025, ymax + 0.025
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
+
+    # Plot consumption of the young time series
+    ax = axes[2, 0]
+    yvalues = sim.c_y / eq.c_y - 1 if deviations else sim.c_y
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(yvalues, **kwargs)
+    # Horizontal line at old steady state
+    yvalues = 0 if deviations else eq.c_y
+    ax.axhline(yvalues, **kwargs_init)
+    # Horizontal line at new steady state
+    if eq_new is not None:
+        yvalues = eq_new.c_y / eq.c_y - 1 if deviations else eq_new.c_y
+        ax.axhline(yvalues, **kwargs_new)
+    ax.set_title('Consumption when young $c_y$')
+    ax.set_ylabel(ylabel)
+    if sim_other is not None:
+        yvalues = sim_other.c_y / eq_other.c_y - 1 if deviations else sim_other.c_y
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
+
+    # Plot consumption of the old time series
+    ax = axes[2, 1]
+    yvalues = sim.c_o / eq.c_o - 1 if deviations else sim.c_o
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(yvalues, **kwargs)
+    # Horizontal line at old steady state
+    yvalues = 0 if deviations else eq.c_o
+    ax.axhline(yvalues, **kwargs_init)
+    # Horizontal line at new steady state
+    if eq_new is not None:
+        yvalues = eq_new.c_o / eq.c_o - 1 if deviations else eq_new.c_o
+        ax.axhline(yvalues, **kwargs_new)
+    ax.set_title('Consumption when old $c_o$')
+    ax.set_ylabel(ylabel)
+    if sim_other is not None:
+        yvalues = sim_other.c_o / eq_other.c_o - 1 if deviations else sim_other.c_o
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
+
+    # Plot interest rate time series (in levels, not as deviations)
+    ax = axes[3, 0]
+    yvalues = sim.r
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(yvalues, **kwargs)
+    # Horizontal line at old steady state
+    ax.axhline(eq.r, **kwargs_init)
+    # Horizontal line at new steady state
+    if eq_new is not None:
+        ax.axhline(eq_new.r, **kwargs_new)
+    ax.set_xlabel('Period')
+    ax.set_title('Interest rate $r$')
+    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    if sim_other is not None:
+        yvalues = sim_other.r
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
 
     # Plot wage time series
+    ax = axes[3, 1]
     yvalues = sim.w / eq.w - 1 if deviations else sim.w
-    axes[1, 1].plot(yvalues, **kwargs)
+    ymin, ymax = yvalues.min(), yvalues.max()
+    ax.plot(yvalues, **kwargs)
     # Horizontal line at old steady state
     yvalues = 0 if deviations else eq.w
-    axes[1, 1].axhline(yvalues, **kwargs_init)
+    ax.axhline(yvalues, **kwargs_init)
     # Horizontal line at new steady state
     if eq_new is not None:
         yvalues = eq_new.w / eq.w - 1 if deviations else eq_new.w
-        axes[1, 1].axhline(yvalues, **kwargs_new)
-    axes[1, 1].set_title('Wage $w$')
-
-    # Plot interest rate time series
-    axes[2, 0].plot(sim.r, **kwargs)
-    # Horizontal line at old steady state
-    axes[2, 0].axhline(eq.r, **kwargs_init)
-    # Horizontal line at new steady state
-    if eq_new is not None:
-        axes[2, 0].axhline(eq_new.r, **kwargs_new)
-    axes[2, 0].set_xlabel('Period')
-    axes[2, 0].set_title('Interest rate $r$')
-    axes[2, 0].yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-
-    # Turn off last subplot
-    axes[2, 1].axis('off')
+        ax.axhline(yvalues, **kwargs_new)
+    ax.set_title('Wage $w$')
+    ax.set_xlabel('Period')
+    ax.set_ylabel(ylabel)
+    if sim_other is not None:
+        yvalues = sim_other.w / eq_other.w - 1 if deviations else sim_other.w
+        ax.plot(yvalues, **kwargs_other)
+        ymin, ymax = min(ymin, yvalues.min()), max(ymax, yvalues.max())
+    # Expand y-limits for nicer plots
+    ax.set_ylim(ymin - 0.1 * (ymax - ymin), ymax + 0.1 * (ymax - ymin))
 
     # Apply settings common to all axes
     if deviations:
-        for ax in axes.flat[:-2]:
+        for ax in axes.flat:
             # Set percent formatting for y-tick labels
             ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-            ax.set_ylim((-0.2, 0.02))
-
-    axes[0, 0].legend()
 
     # Optionally save the figure
     if filename:
@@ -480,7 +623,7 @@ if __name__ == '__main__':
     # Create parameter instance
     par = Parameters()
 
-    # Solve for the equilibrium numerically
+    # Solve for the initial equilibrium
     eq = compute_steady_state(par)
 
     # Print equilibrium quantities and prices
@@ -488,26 +631,42 @@ if __name__ == '__main__':
 
     # --- Transition dynamics ---
 
-    # Create new parameter instance with gamma = 1
-    par = Parameters(gamma=1)
-
-    # Initial steady state
-    eq_init = compute_steady_state(par)
-
     # Number of periods to simulate
     T = 20
 
-    # New TFP level (10% drop from steady state)
-    z_new = 0.9 * par.z
+    # -- Scenario A: Transitory TFP shock --
+
+    # Initialize TFP series with steady-state value
+    z_trans = np.full(T + 1, fill_value=par.z)
+    # Drop TFP by 10% in period 1, leave other periods unchanged
+    z_trans[1] = 0.9 * z_trans[0]
 
     # Perform simulation
-    sim = simulate_olg(z_new, eq_init, T=T)
-
-    # Compute new steady state
-    eq_new = compute_steady_state(par=Parameters(gamma=par.gamma, z=z_new))
+    sim_trans = simulate_olg(z_trans, eq)
 
     # Define file name for figure (placed in the same folder as this script)
-    filename = Path(__file__).parent / 'olg_simulation.pdf'
+    filename = Path(__file__).parent / 'workshop07_ex01_transitory.pdf'
 
-    # Plot simulation and store figure
-    plot_simulation(eq_init, sim, eq_new, filename=filename)
+    # Plot simulation results
+    plot_simulation(eq, sim_trans, filename=filename)
+
+    # -- Scenario B: Persistent TFP shock --
+
+    # Initialize empty TFP series
+    z_pers = np.empty(T + 1)
+    # Set initial TFP to steady-state value
+    z_pers[0] = par.z
+    # Drop TFP by 10% in period 1
+    z_pers[1] = 0.9 * z_pers[0]
+    # Subsequently, TFP evolves according to the process: z_t = (1-kappa)*z_{t-1} + kappa*1.0
+    for t in range(2, T + 1):
+        z_pers[t] = (1 - par.kappa) * z_pers[t - 1] + par.kappa * 1.0
+
+    # Perform simulation
+    sim_pers = simulate_olg(z_pers, eq)
+
+    # Define file name for figure (placed in the same folder as this script)
+    filename = Path(__file__).parent / 'workshop07_ex01_persistent.pdf'
+
+    # Plot simulation results
+    plot_simulation(eq, sim_pers, filename=filename)

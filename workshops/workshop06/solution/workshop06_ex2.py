@@ -1,8 +1,12 @@
 """
-Template for workshop 6, exercise 2
+Solution for workshop 6, exercise 2
 """
 
 from dataclasses import dataclass
+import numpy as np
+from scipy.optimize import root_scalar, root
+
+
 from workshop06_ex1 import solve_firm, solve_hh
 
 
@@ -12,7 +16,13 @@ class Parameters:
     Container to store the problem's parameters.
     """
 
-    # TODO: Add model parameters
+    alpha: float = 0.36  # Capital share in production function
+    z: float = 1.0  # TFP
+    gamma: float = 2.0  # RRA in utility
+    psi: float = 1.0  # Weight on disutility of working
+    theta: float = 0.5  # Frisch elasticity of labor supply
+    N1: int = 5  # Number of type-1 households
+    N2: int = 5  # Number of type-2 households
 
 
 @dataclass
@@ -49,12 +59,20 @@ def compute_labor_ex_demand(w, par: Parameters):
     float
         Excess demand for labor.
     """
+    # Wage and profits implied by firm's first-order condition
+    L, Y, Pi = solve_firm(w, par)
 
-    # TODO:
-    # 1. compute labor demand, output, and profits using solve_firm()
-    # 2. compute optimal consumption and labor supply using solve_hh()
-    # 3. compute excess demand for labor
-    # 4. return excess demand for labor
+    # Equilibrium household choices
+    # Type 1 receives no profits
+    c1, h1 = solve_hh(w, 0.0, par)
+    # Per-capita profits for type 2 households
+    pi2 = Pi / par.N2
+    c2, h2 = solve_hh(w, pi2, par)
+
+    # Excess demand for labor
+    ex_demand = L - par.N1 * h1 - par.N2 * h2
+
+    return ex_demand
 
 
 def compute_equilibrium(par):
@@ -71,14 +89,28 @@ def compute_equilibrium(par):
     Equilibrium
         Equilibrium object containing the equilibrium values.
     """
+    # Initial bracket for root finder
+    bracket = (1.0e-3, 5)
 
-    # TODO:
-    # 1. call root-finder to find equilibrium wage
-    # 2. Create an instance of the Equilibrium class to store equilibrium values
-    # 3. compute and store equilibrium values from firm problem (L, Y, Pi)
-    # 4. compute and store equilibrium values from type-1 household problem
-    # 5. compute and store equilibrium values from type-2 household problem
-    # 6. return Equilibrium instance
+    # Find equilibrium wage
+    res = root_scalar(compute_labor_ex_demand, bracket=bracket, args=(par,))
+
+    if not res.converged:
+        print('Equilibrium root finder did not terminate successfully')
+
+    # Create instance of equilibrium class
+    eq = Equilibrium(par=par, w=res.root)
+
+    # Equilibrium wage, output and profits
+    eq.L, eq.Y, eq.Pi = solve_firm(eq.w, par)
+
+    # Equilibrium household choices
+    eq.c1, eq.h1 = solve_hh(eq.w, 0.0, par)
+    # Per-capita profits for type 2 households
+    eq.pi2 = eq.Pi / par.N2
+    eq.c2, eq.h2 = solve_hh(eq.w, eq.pi2, par)
+
+    return eq
 
 
 def print_equilibrium(eq: Equilibrium):
@@ -133,15 +165,26 @@ def foc_error(x, par: Parameters):
     numpy.ndarray
         Array containing the differences from the first-order conditions.
     """
+    # Extract candidate guess for labor supply
+    h1, h2 = x
 
-    # TODO:
-    # 1. extract candidate guess for labor supply (h1, h2)
-    # 2. compute aggregate labor supply
-    # 3. compute wage from firm's FOC
-    # 4. compute aggregate firm profits
-    # 5. compute FOC for HH type 1
-    # 6. compute FOC for HH type 2
-    # 7. return array with differences of the LHS and RHS of the FOCs
+    # Aggregate labor supply
+    L = par.N1 * h1 + par.N2 * h2
+    # wage from firm's FOC
+    w = (1 - par.alpha) * par.z * L ** (-par.alpha)
+    # Aggregate firm profits
+    Pi = par.alpha * par.z * L ** (1 - par.alpha)
+
+    # FOC for HH type 1
+    diff1 = par.psi * h1 ** (1 / par.theta) / w - (w * h1) ** (-par.gamma)
+    # Profits per capita for HH type 2
+    pi2 = Pi / par.N2
+    # FOC for HH type 2
+    diff2 = par.psi * h2 ** (1 / par.theta) / w - (w * h2 + pi2) ** (-par.gamma)
+
+    fx = np.array((diff1, diff2))
+
+    return fx
 
 
 def compute_equilibrium_root(par):
@@ -162,12 +205,36 @@ def compute_equilibrium_root(par):
         Equilibrium object containing the equilibrium values.
     """
 
-    # TODO:
-    # 1. call root-finder to find equilibrium labor supplies (h1, h2)
-    # 2. compute and store equilibrium values from firm problem
-    # 3. compute and store equilibrium values from type-1 household problem
-    # 4. compute and store equilibrium values from type-2 household problem
-    # 5. return Equilibrium instance
+    # Initial guess for labor supply (h1, h2)
+    x0 = np.array((0.5, 0.5))
+
+    # Find (h1, h2) that satisfy the FOCs
+    res = root(foc_error, x0=x0, args=(par,), method='hybr')
+
+    if not res.success:
+        print('Equilibrium root finder did not terminate successfully')
+
+    # Extract equilibrium labor supply choices
+    h1, h2 = res.x
+
+    # Aggregate labor supply
+    L = par.N1 * h1 + par.N2 * h2
+
+    # Wage implied by firm's FOC
+    w = (1 - par.alpha) * par.z * L ** (-par.alpha)
+
+    # Create instance of equilibrium class
+    eq = Equilibrium(par=par, w=w, L=L, h1=h1, h2=h2)
+
+    # Equilibrium wage, output and profits
+    eq.L, eq.Y, eq.Pi = solve_firm(eq.w, par)
+
+    # Equilibrium household choices
+    eq.c1 = w * eq.h1
+    eq.pi2 = eq.Pi / par.N2
+    eq.c2 = w * eq.h2 + eq.pi2
+
+    return eq
 
 
 if __name__ == '__main__':

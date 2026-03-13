@@ -11,11 +11,11 @@ Frequency: `Q` = Quarterly, `M` = Monthly
 |------|-------------|-------|-----------|--------|
 | `CPI.csv` | Consumer Price Index for All Urban Consumers: All Items in U.S. City Average | Index (1982-84 = 100) | `M` | [Source](https://fred.stlouisfed.org/series/CPIAUCSL) |
 | `FEDFUNDS.csv` | Effective Federal Funds Rate | Percent | `M` | [Source](https://fred.stlouisfed.org/series/FEDFUNDS) |
-| `GDP.csv` | Real gross domestic product | Billions of chained 2017 US dollars | `Q` | [Source](https://fred.stlouisfed.org/series/GDPC1) |
+| `GDP.csv` | Real Gross Domestic Product | Billions of chained 2017 US dollars | `Q` | [Source](https://fred.stlouisfed.org/series/GDPC1) |
 | `GDPPOT.csv` | Real Potential Gross Domestic Product | Billions of Chained 2017 Dollars | `Q` | [Source](https://fred.stlouisfed.org/series/GDPPOT) |
 | `LFPART.csv` | Labor Force Participation Rate | Percent | `M` | [Source](https://fred.stlouisfed.org/series/CIVPART) |  
 | `NROU.csv` | Noncyclical Rate of Unemployment | Percent | `Q` | [Source](https://fred.stlouisfed.org/series/NROU) |
-| `UNRATE.csv` | Unemployment rate | Percent | `M` | [Source](https://fred.stlouisfed.org/series/UNRATE) |
+| `UNRATE.csv` | Unemployment Rate | Percent | `M` | [Source](https://fred.stlouisfed.org/series/UNRATE) |
 | `REALRATE.csv` | 1-Year Real Interest Rate | Percent | `M` | [Source](https://fred.stlouisfed.org/series/REAINTRATREARAT1YE) |
 
 ## Files with multiple time series

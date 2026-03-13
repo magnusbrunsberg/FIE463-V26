@@ -35,18 +35,17 @@ def util(c, h, gamma, psi, theta):
         u = np.log(c)
     else:
         # General CRRA utility
-        u = (c ** (1 - gamma) - 1) / (1 - gamma)
+        u = (c**(1-gamma) - 1) / (1-gamma)
 
-    # Add disutility of labor
-    u -= psi * h ** (1 + 1 / theta) / (1 + 1 / theta)
+    # add disutility of labor
+    u -= psi * h**(1 + 1/theta) / (1 + 1/theta)
 
     return u
 
 
-def util_h(h, gamma, psi, theta, a, w):
+def util_h(h, gamma, psi, theta, a, w, diagnostics=False):
     """
-    Compute utility for given labor choice and parameters
-    (used for minimizer).
+    Compute utility for given labor choice and parameters.
 
     Parameters
     ----------
@@ -62,12 +61,18 @@ def util_h(h, gamma, psi, theta, a, w):
         Initial assets.
     w : float
         Wage rate.
-
+    diagnostics : bool
+        If True, print diagnostic information when the function is called.
+        
     Returns
     -------
     u : float or array
         Utility value.
     """
+
+    # Diagnostics: print the value of h when the function is called
+    if diagnostics:
+        print(f'Objective function called with h={h:.8f}')
 
     # Recover consumption from the budget constraint
     c = a + w * h
@@ -80,8 +85,7 @@ def util_h(h, gamma, psi, theta, a, w):
 
 def foc(h, gamma, psi, theta, a, w):
     """
-    Compute the difference LHS - RHS of the first-order condition
-    (used for root finder).
+    Compute the difference LHS - RHS of the first-order condition.
 
     Parameters
     ----------
@@ -100,14 +104,14 @@ def foc(h, gamma, psi, theta, a, w):
 
     Returns
     -------
-    diff : float
-        Difference LHS - RHS of the first-order condition.
+    diff : float or array
+        Difference LHS - RHS of the first-order condition.  
     """
 
     # Compute the left-hand side (LHS) of the first-order condition
-    lhs = (a + w * h) ** (-gamma)
+    lhs = (a + w * h)**(-gamma)
     # Compute the right-hand side (RHS) of the first-order condition
-    rhs = psi * h ** (1 / theta) / w
+    rhs = psi * h**(1/theta) / w
 
     # Compute the difference of the LHS and RHS. Should be 0 at the optimum.
     diff = lhs - rhs
@@ -314,9 +318,9 @@ def main():
     """
 
     # Parameters for model with analytical solution
-    a = 1           # initial assets
+    a = 0           # initial assets
     w = 2           # wage rate
-    gamma = 2       # Relative risk aversion
+    gamma = 1       # Relative risk aversion
     psi = 1.5       # weight on disutility of labor
     theta = 0.5     # labor supply elasticity
 

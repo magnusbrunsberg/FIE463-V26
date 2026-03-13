@@ -1,9 +1,10 @@
 """
-Template for workshop 6, exercise 1
+Solution for workshop 6, exercise 1
 """
 
 from dataclasses import dataclass
 import numpy as np
+from scipy.optimize import minimize, root_scalar
 
 
 @dataclass
@@ -12,7 +13,11 @@ class Parameters:
     Container to store the problem's parameters.
     """
 
-    # TODO: add model parameters
+    alpha: float = 0.36  # Capital share in production function
+    z: float = 1.0  # TFP
+    gamma: float = 2.0  # RRA in utility
+    psi: float = 1.0  # Weight on disutility of working
+    theta: float = 0.5  # Frisch elasticity of labor supply
 
 
 @dataclass
@@ -84,10 +89,28 @@ def solve_hh(w, pi, par: Parameters):
         Optimal labor supply
     """
 
-    # TODO:
-    # 1. call minimizer to find the optimal hours choice
-    # 2. compute optimal consumption from budget constraint
-    # 3. return optimal consumption and labor supply
+    # Initial guess for h
+    h_guess = 0.5
+
+    res = minimize(
+        lambda h: -util(w * h + pi, h, par),
+        x0=h_guess,
+        method='L-BFGS-B',
+        bounds=((0, None),),
+    )
+
+    if not res.success:
+        # Print diagnostic error message if minimizer had problems
+        print('Minimizer did not terminate successfully')
+        print(res.message)
+        print(f'  Arguments: w={w}, pi={pi}')
+
+    # Store optimal hours choice
+    h_opt = res.x[0]
+    # Optimal consumption follows from budget constraint
+    c_opt = w * h_opt + pi
+
+    return c_opt, h_opt
 
 
 def solve_firm(w, par: Parameters):
@@ -112,11 +135,16 @@ def solve_firm(w, par: Parameters):
         Aggregate profits
     """
 
-    # TODO:
-    # 1. compute labor demand L from equation (1.1)
-    # 2. compute output Y
-    # 3. compute profits Pi
-    # 4. return labor demand, output, and profits
+    # Labor demand
+    L = ((1 - par.alpha) * par.z / w) ** (1 / par.alpha)
+
+    # Output
+    Y = par.z * L ** (1 - par.alpha)
+
+    # Profits
+    Pi = Y - w * L
+
+    return L, Y, Pi
 
 
 def compute_labor_ex_demand(w, par: Parameters):
@@ -136,11 +164,16 @@ def compute_labor_ex_demand(w, par: Parameters):
         Excess demand for labor
     """
 
-    # TODO:
-    # 1. compute labor demand, output, and profits using solve_firm()
-    # 2. compute optimal consumption and labor supply using solve_hh()
-    # 3. compute excess demand for labor
-    # 4. return excess demand for labor
+    # Wage and profits implied by firm's first-order condition
+    L, Y, Pi = solve_firm(w, par)
+
+    # Optimal household choices for given prices
+    c_opt, h_opt = solve_hh(w, Pi, par)
+
+    # Excess demand for labor
+    ex_demand = L - h_opt
+
+    return ex_demand
 
 
 def compute_equilibrium(par):
@@ -158,12 +191,24 @@ def compute_equilibrium(par):
         Equilibrium instance containing equilibrium values
     """
 
-    # TODO:
-    # 1. call root-finder to find equilibrium wage
-    # 2. Create an instance of the Equilibrium class to store equilibrium values
-    # 3. compute and store equilibrium values from firm problem (L, Y, Pi)
-    # 4. compute and store equilibrium values from household problem (c, h)
-    # 5. return Equilibrium instance
+    # Define initial bracket for root finder
+    bracket = (1.0e-3, 5)
+
+    res = root_scalar(compute_labor_ex_demand, bracket=bracket, args=(par,))
+
+    if not res.converged:
+        print('Equilibrium root finder did not terminate successfully')
+
+    # Create instance of equilibrium class
+    eq = Equilibrium(par=par, w=res.root)
+
+    # Equilibrium wage, output and profits
+    eq.L, eq.Y, eq.Pi = solve_firm(eq.w, par)
+
+    # Equilibrium household choices
+    eq.c, eq.h = solve_hh(eq.w, eq.Pi, par)
+
+    return eq
 
 
 def print_equilibrium(eq: Equilibrium):

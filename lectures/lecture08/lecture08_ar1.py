@@ -2,14 +2,14 @@
 Lecture 8: Code for section on AR(1) processes
 """
 
-
 import numpy as np
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 
 
 def simulate_ar1(x0, mu, rho, sigma, T, rng=None):
     """
-    Simulate an AR(1) process.
+    Simulate an AR(1) process for T periods, returning T+1 values including 
+    the initial value.
 
     Parameters
     ----------
@@ -29,25 +29,25 @@ def simulate_ar1(x0, mu, rho, sigma, T, rng=None):
     Returns
     -------
     numpy.ndarray
-        An array of length `n` containing the simulated AR(1) process.
+        An array of length T+1 containing the simulated AR(1) process.
     """
 
     # Create an array to store the simulated values
-    x = np.zeros(T+1)
+    x = np.zeros(T + 1)
 
     # Set the initial value
     x[0] = x0
 
-    # Create RNG instance
+    # Create RNG instance if none was provided
     if rng is None:
         rng = np.random.default_rng(seed=1234)
-        
-    # Draw random shocks
+
+    # Draw random shocks epsilons for each time period
     eps = rng.normal(loc=0, scale=sigma, size=T)
 
     # Simulate the AR(1) process
     for i in range(T):
-        x[i+1] = mu + rho * x[i] + eps[i]
+        x[i + 1] = mu + rho * x[i] + eps[i]
 
     return x
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     # Initial value
     x0 = 0.0
 
-    # Intercept 
+    # Intercept
     mu = 0.0
 
     # Autocorrelation parameter
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     plt.xlabel('Time')
     plt.title('Simulated AR(1) Process')
     # Add unconditional mean
-    uncond_mean = mu/(1-rho) 
+    uncond_mean = mu / (1 - rho)
     plt.axhline(uncond_mean, color='black', linestyle='--', lw=0.5, label='Mean')
     plt.legend()
     plt.show()
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     N = 20
 
     # Create an array to store the simulated values
-    data = np.zeros((N, T+1))
+    data = np.zeros((N, T + 1))
 
     # Simulate the AR(1) process N times
     for i in range(N):
