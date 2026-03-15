@@ -256,6 +256,11 @@ def simulate_olg(K0, T, par: Parameters, uncertain=False):
     ck_y = b + Ta - a
     ck_o = (1 - par.phi) * (1 - par.tau_a) * (1 + r) * a_prev + Ta
     
+    # Validation: goods market clearing check in each period
+    C = (par.Nw / 2) * (cw_y + cw_o) + (par.Nk / 2) * (ck_y + ck_o)
+    I = K_next - (1 - par.delta) * K_t
+    assert np.all(np.abs(Y - C - I) < 1e-4), "Goods market clearing violated during transition."
+    
     return Simulation(K=K_t, Y=Y, w=w, r=r, cw_y=cw_y, cw_o=cw_o, 
                       ck_y=ck_y, ck_o=ck_o, a=a, b=b, st=st)
 
@@ -361,7 +366,7 @@ pct_K = (ss_opt.K - ss_base.K) / ss_base.K * 100
 
 print(f"Output change (Y) at tau*: {pct_Y:.2f}%")
 print(f"Capital change (K) at tau*: {pct_K:.2f}%")""")
-add_markdown("While output and capital drop natively due to the deadweight losses embedded in taxing capital accumulation, a large wealth tax functions predominantly as an egalitarian redistributive mechanism under utilitarianism. It strips vast capital piles from the wealthy 20% and provides heavily subsidized lump-sum consumption to the poorer 80% working class. Since their utility functions are deeply concave ($ \gamma = 2.1 $), the enormous utility gains realized by the workers vastly exceed the aggregated utility losses inflicted upon the small capitalist class, technically maximizing social welfare overall.")
+add_markdown(r"While output and capital drop natively due to the deadweight losses embedded in taxing capital accumulation, a large wealth tax functions predominantly as an egalitarian redistributive mechanism under utilitarianism. It strips vast capital piles from the wealthy 20% and provides heavily subsidized lump-sum consumption to the poorer 80% working class. Since their utility functions are deeply concave ($ \gamma = 2.1 $), the enormous utility gains realized by the workers vastly exceed the aggregated utility losses inflicted upon the small capitalist class, technically maximizing social welfare overall.")
 
 # Part 6
 add_markdown("## Part 6 — Uncertainty about wealth taxes")
@@ -415,14 +420,14 @@ ss_uncert = compute_steady_state(par, uncertain=True)
 print("--- Steady State with Tax Policy Uncertainty ---")
 print(f"Capital K: {ss_uncert.K:.5f} (Base K = {ss_base.K:.5f})")
 print(f"Output Y:  {ss_uncert.Y:.5f} (Base Y = {ss_base.Y:.5f})")""")
-add_markdown("This steady state is not identical to the one solved in Part 2. Even though the actual rate is zero today in both scenarios, capitalists base their entire current savings decision on expectations about the future. By holding a positive probability ($ \pi_a=0.5 $) that their savings could face an expropriating tax ($ \tau_a=0.05 $) during retirement, their anticipated risk-adjusted net returns inherently compress. Under CRRA preferences, this negative wealth projection discourages savings right now, anchoring equilibrium output and capital lower than the purely deterministic no-tax scenario where future property rights are guaranteed completely safe.")
+add_markdown(r"This steady state is not identical to the one solved in Part 2. Even though the actual rate is zero today in both scenarios, capitalists base their entire current savings decision on expectations about the future. By holding a positive probability ($ \pi_a=0.5 $) that their savings could face an expropriating tax ($ \tau_a=0.05 $) during retirement, their anticipated risk-adjusted net returns inherently compress. Under CRRA preferences, this negative wealth projection discourages savings right now, anchoring equilibrium output and capital lower than the purely deterministic no-tax scenario where future property rights are guaranteed completely safe.")
 
 add_code("""# Simulate transition path where uncertainty hits in t=0, but tau remains 0.
 sim_uncert = simulate_olg(ss_base.K, T=20, par=par, uncertain=True)
 
 # Plot transition
 plot_simulation(sim_uncert, "Transition with Expected Future Expropriation Risk")""")
-add_markdown("This new steady state resides squarely in a middle ground compared to Parts 2 and 5. Capital accumulation and output fundamentally underperform the purely deterministic `tau_a=0.00` landscape because unceasing uncertainty depresses sustained private savings momentum. Correspondingly however, it performs drastically better than a purely implemented deterministic heavy wealth tax, since capital returns are physically salvaged over time yielding a less depressed labor wedge. Effectively, the sheer fear of taxation structurally scars output through expectations alone without achieving any tangible redistribution.")
+add_markdown(r"This new steady state resides squarely in a middle ground compared to Parts 2 and 5. Capital accumulation and output fundamentally underperform the purely deterministic `tau_a=0.00` landscape because unceasing uncertainty depresses sustained private savings momentum. Correspondingly however, it performs drastically better than a purely implemented deterministic heavy wealth tax, since capital returns are physically salvaged over time yielding a less depressed labor wedge. Effectively, the sheer fear of taxation structurally scars output through expectations alone without achieving any tangible redistribution.")
 
 
 # Dump notebook
