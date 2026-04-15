@@ -48,7 +48,7 @@ See README files in subfolders for documentation and sources.
 
     1.  `PassengerId`: Passenger ID
     2.  `Survived`: Indicator of whether the person survived
-    3.  `Pclass`: Accommodation class (first, second, third)
+    3.  `Pclass`: Passenger class (first, second, third)
     4.  `Name`: Name of passenger (last name, first name)
     5.  `Sex`: `male` or `female`
     6.  `Age`
