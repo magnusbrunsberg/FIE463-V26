@@ -1,0 +1,835 @@
+----- MARKDOWN -----
+# FIE463 Term Paper 2
+
+## Expectations about macroeconomic and financial variables
+
+----- CODE -----
+# --- 1. Master Environment Components & Library Dependencies ---
+# It is structural coding best practice to universally lock all dependency modules to the literal top of the evaluation loop.
+
+# Standard Core Libraries
+import glob            # WS 9 for å matche filer med et mønster/pattern
+import os              # WS 9 for operasjone
+import warnings        # Usikker på om har blitt brukt tidligere, men jeg har brukt på UiB. Siden scikit-learn kan spy ut masse warnings
+
+# Datastrukturer, vektorisering og grafisk fremstilling
+import matplotlib.pyplot as plt
+import numpy as np  # Mange WS's, Lecture 9-12
+import pandas as pd # Masse i WS's og
+
+# Scikit-Learn
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LinearRegression, RidgeCV, LassoCV
+from sklearn.linear_model import LogisticRegressionCV
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+# Warnings
+warnings.filterwarnings('ignore') # Tar bort innebygde warnings i output fra feks Scikit learn
+
+----- MARKDOWN -----
+## Part 1 - Data preprocessing (SCE)
+
+----- CODE -----
+# Definerer filsti
+DATA_DIR = './data'
+
+# for å bruke glob (WS 9)
+file_pattern = os.path.join(DATA_DIR, "sce_extract_*.csv")
+file_list = glob.glob(file_pattern)
+
+# Bruker pd.concat for å merge en lite med dataframes (WS 9!!)
+df_sce = pd.concat([pd.read_csv(f) for f in file_list], ignore_index=True)
+
+# Oversikt
+print(f"Successfully merged {len(file_list)} files.")
+print(f"Total initial rows: {len(df_sce)}")
+print(f"Dataset columns:\n {df_sce.columns.tolist()}")
+
+----- CODE -----
+# 1.2 Forward-fill variables asked only in the initial wave
+
+df_sce['date'] = pd.to_datetime(df_sce['date']) 
+df_sce = df_sce.sort_values(by=['userid', 'date'])
+
+# OBS SE SENERE: 'health' og 'take_fin_risk' har veldig mange missing values. Droppe å droppe?
+# Når jeg tar med faller sample til ~123k. Å overse de fører oss til ~150k !!!
+initial_wave_vars = ['owner', 'educ', 'female', 'num_lit_q1_correct', 'num_lit_q2_correct', 'num_lit_q3_correct']
+
+for col in initial_wave_vars:
+    if col in df_sce.columns:
+        df_sce[col] = df_sce.groupby('userid')[col].ffill()
+
+print(f"Successfully forward-filled the following initial-wave variables:\n{initial_wave_vars}")
+
+----- MARKDOWN -----
+### 1.3 Drop Year 2025 Survey Waves
+As specified in the assignment, we filter out any 2025 observations to circumvent the irregular variance and noise introduced contextually in the dataset.
+
+----- CODE -----
+# 1.3 Drop 2025
+
+# Storing total rows before drop for reporting
+rows_before_drop2025 = len(df_sce)
+
+# LECTURE 9 TRIKS: Filtering out 2025 using pandas boolean indexing on the datetime `.dt.year`
+df_sce = df_sce[df_sce['date'].dt.year < 2025]
+
+# Using a standard pandas copy to prevent warnings later
+df_sce = df_sce.copy()
+
+print(f"Rows before dropping 2025: {rows_before_drop2025}")
+print(f"Number of observations dropped (2025): {rows_before_drop2025 - len(df_sce)}")
+print(f"Total remaining rows: {len(df_sce)}")
+
+----- MARKDOWN -----
+### 1.4 Clean NAs 
+We isolate the specific features and targets used in our machine learning pipeline and subsequently drop any observations missing data points inside this core subset. As before, we report the exact count of observations dropped.
+
+----- CODE -----
+# 1.4 Drop rows with missing data for variables used in analysis
+rows_before_na_drop = len(df_sce)
+
+# Define our continuous modeling targets
+expectation_vars = ['infl_1y', 'house_price_change', 'prob_unrate_up', 'prob_stocks_up']
+
+# Define essential identifying variables
+id_vars = ['userid', 'wid', 'date']
+
+# Calculate final core subset, using initial_wave_vars defined in 1.2
+core_columns = id_vars + expectation_vars + initial_wave_vars
+
+# Ensure we only evaluate columns that actually exist in the dataframe 
+available_cols_to_check = [col for col in core_columns if col in df_sce.columns]
+
+# Drop NaNs subsetted specifically to our modeling variables
+df_sce = df_sce.dropna(subset=available_cols_to_check).copy()
+
+# Retain only these columns to optimize memory utilization for performance
+df_sce = df_sce[available_cols_to_check]
+
+print(f"Rows before dropping NaNs: {rows_before_na_drop}")
+print(f"Number of observations dropped (NaNs): {rows_before_na_drop - len(df_sce)}")
+print(f"Total remaining rows: {len(df_sce)}")
+
+----- MARKDOWN -----
+### 1.5 Handle Outliers
+To improve the robustness and generalization of our continuous variable machine learning models (e.g. Ridge and Lasso regressors later on), we explicitly truncate observations falling outside the 1st and 99th percentile bounds for each of the four main expectation factors. We report the exact amount of dropped outliers as well.
+
+----- CODE -----
+# 1.5 Handle Outliers (strict clipping between P1 and P99)
+
+rows_before_outliers_drop = len(df_sce)
+
+for col in expectation_vars:
+    # Compute the 1st (P1) and 99th (P99) percentiles using pandas
+    p1 = df_sce[col].quantile(0.01)
+    p99 = df_sce[col].quantile(0.99)
+    
+    # Filter dataset sequentially keeping only values strictly > P1 and < P99
+    df_sce = df_sce[(df_sce[col] > p1) & (df_sce[col] < p99)]
+
+print(f"Rows before handling outliers: {rows_before_outliers_drop}")
+print(f"Number of outlier observations dropped: {rows_before_outliers_drop - len(df_sce)}")
+print(f"Total remaining rows: {len(df_sce)}")
+
+----- MARKDOWN -----
+### 1.6 & 1.7 Feature Engineering (Binary Indicators) & Final Report
+We convert continuous expectation expectations into a binary format (`1` for Optimistic view, `0` for Pessimistic view) to be used as discrete targets for classification modeling in Part 6. 
+Finally, we run an output summary to validate the final cleaned SCE table before proceeding to Part 2.
+
+----- CODE -----
+# 1.6 Create binary indicator variables
+
+df_sce['optimist_unrate'] = np.where(df_sce['prob_unrate_up'] < 50, 1, 0)
+df_sce['optimist_stocks'] = np.where(df_sce['prob_stocks_up'] > 50, 1, 0)
+df_sce['optimist_house_price'] = np.where(df_sce['house_price_change'] > 0, 1, 0)
+
+# Final Part 1 Preprocessing Report
+# EGEN CODE BLOCK ELLER?
+print("--- Final Cleaned SCE Dataset ---")
+print(f"Total Unique Individuals: {df_sce['userid'].nunique()}")
+print(f"Total Observations: {len(df_sce)}")
+print(f"Number of Survey Waves: {df_sce['date'].nunique()}")
+print(f"Starting Date: {df_sce['date'].min().strftime('%Y-%m-%d')}")
+print(f"Ending Date: {df_sce['date'].max().strftime('%Y-%m-%d')}")
+
+----- MARKDOWN -----
+## Part 2 - Macroeconomic & Financial Data
+To predict expectations without violating causality (look-ahead bias), we fetch raw macro data, strictly resample it to Month-End (`ME`), and execute a `merge_asof` algorithm with `direction='backward'` so respondents only see data theoretically published *prior* or strictly *on* their survey date.
+
+----- CODE -----
+# 2.1 Load and process macro/finance time-series
+
+# Map of filenames to their (Raw Target Column, Standardized Lowercase Column)
+# Brukte yFinance, men tar ikke med i koden siden det ikke skal lastes inn på nytt
+macro_files = {
+    'CPIAUCSL.csv': ('CPIAUCSL', 'cpi'),
+    'UNRATE.csv': ('UNRATE', 'unrate'),
+    'GDPC1.csv': ('GDPC1', 'gdp'),
+    'MORTGAGE30US.csv': ('MORTGAGE30US', 'mortgage'),
+    'FEDFUNDS.csv': ('FEDFUNDS', 'fedfunds'),
+    'USSTHPI.csv': ('USSTHPI', 'house_idx'),
+    'GSPC.csv': ('Close', 'sp500'),
+    'DTWEXBGS.csv': ('DTWEXBGS', 'dollar'),
+    'CL_F.csv': ('Close', 'oil')
+}
+
+df_macro_list = []
+
+# Iterating to keep our code DRY
+for file, (val_col, new_name) in macro_files.items():
+    filepath = os.path.join(DATA_DIR, file)
+    if os.path.exists(filepath):
+        df_temp = pd.read_csv(filepath)
+        
+        # Ensure we only pick the Date and the appropriate Value column
+        df_temp = df_temp[['Date', val_col]].rename(columns={'Date': 'date', val_col: new_name})
+        
+        # Convert to datetime and cast any non-numeric coercions seamlessly 
+        df_temp['date'] = pd.to_datetime(df_temp['date'])
+        df_temp[new_name] = pd.to_numeric(df_temp[new_name], errors='coerce')
+        
+        # Sort values and drop localized NAs
+        df_temp = df_temp.sort_values('date').dropna()
+        
+        # Standardize Frequency to Month End ('ME') using .last() method
+        df_temp = df_temp.set_index('date').resample('ME').last()
+        
+        df_macro_list.append(df_temp)
+
+# Concat horizontally using the datetime index mathematically aligned 
+df_macro = pd.concat(df_macro_list, axis=1)
+
+# Forward-fill any NaN overlaps organically caused by differing publication schedules across indicators
+df_macro = df_macro.ffill()
+
+# Reset index so 'date' is a column again for merge_asof
+df_macro = df_macro.reset_index()
+
+print("Resampled Macro Headers:")
+print(df_macro.columns.tolist())
+
+----- MARKDOWN -----
+### 2.2 Calculate Trailing Dynamics & Merge
+Respondents react to momentum, not just flat values. We calculate the 1-month and 12-month trailing absolute differences and percentage changes for all macroeconomic indicators, then execute the strictly backward `merge_asof` operation.
+
+----- CODE -----
+# 2.2 Calculate 1-month / 12-month changes and merge
+
+macro_vars = [col for col in df_macro.columns if col != 'date']
+
+# Create trailing differences and percentage changes
+for col in macro_vars:
+    # 1-month momentum
+    df_macro[f"{col}_diff1"] = df_macro[col].diff(1)
+    df_macro[f"{col}_pct1"] = df_macro[col].pct_change(1)
+    
+    # 12-month momentum
+    df_macro[f"{col}_diff12"] = df_macro[col].diff(12)
+    df_macro[f"{col}_pct12"] = df_macro[col].pct_change(12)
+
+# It's explicitly required to sort both dataframes chronologically by the 'on' key prior to merge_asof
+df_sce = df_sce.sort_values('date')
+df_macro = df_macro.sort_values('date')
+
+initial_size = len(df_sce)
+
+# Backward ASOF Merge: Guarantees no look-ahead data leakage! (Fra Workshopper)
+# Takes the survey date, and looks purely backward in the df_macro matrix to simulate reality.
+df_final = pd.merge_asof(
+    df_sce, 
+    df_macro, 
+    on='date', 
+    direction='backward'
+)
+
+# Because diff(12) requires 12 months of historical data to compute, 
+# some rows in df_final might contain NaNs in their trailing columns depending on macro data ranges.
+# We drop these as they represent our mathematical 'burn-in' period.
+df_final = df_final.dropna(subset=[f"{macro_vars[0]}_diff12"])
+
+# We must now reset our tracking sizes because we've shifted variables significantly
+print(f"SCE shape before merge: {initial_size}")
+print(f"Rows dropped due to 'burn-in' trailing macro calculation: {initial_size - len(df_final)}")
+print(f"Final merged dataset size ready for modeling: {len(df_final)}")
+
+----- MARKDOWN -----
+### 2.3 Economic Motivation for Feature Engineering Format Restrictions
+We deliberately structure our trailing macroeconomic regressors into three distinct mathematical formats, aligning with behavioral economics principles regarding how households functionally evaluate the state of the economy:
+
+**1. Raw Levels (e.g., Unchanged Rates)**
+Raw levels establish the *baseline context* or anchor for the respondent. An individual's fear of unemployment realistically increasing is heavily mathematically dependent on the current baseline condition. For instance, expecting unemployment to rise when the current base level is 3.5% represents a significantly different psychological environment than expecting it to rise when the base is naturally anchored at 9.0%.
+
+**2. Absolute Differences (1-month & 12-month)**
+Absolute differences are the correct method to measure momentum for variables that are *already expressed as percentages or rates* (like FEDFUNDS interest rates or the Unemployment Rate). If the Fed Funds rate jumps from 1.0% to 2.0%, that is cleanly quantified as a +1.0% absolute point jump. If we incorrectly computed a relative percentage change for this momentum block, it would register as an extreme +100% surge, which artificially exaggerates the data and distorts linear regression sensitivity boundaries.
+
+**3. Relative Percentage Changes (1-month & 12-month)**
+Raw values for massive economic indices (like the S&P 500 index, real GDP level, or the abstract dollar indices) are non-stationary and functionally useless to the average consumer. A consumer doesn't shape their personal expectations systematically based on whether the S&P 500 is trading at exactly 4,000 points or 4,100 points; they base it on the contextual news headline that "the stock market is up 20% this year." By strictly computing 1-month and 12-month percentage shifts, we transform non-stationary index evaluations into stationary, normalized variables that replicate how households perceive and measure performance constraints.
+
+----- MARKDOWN -----
+## Part 3 - Exploratory Data Analysis (SCE)
+We generate exploratory visualizations to review the statistical distributions of our continuous expectation variables prior to regression modeling.
+
+----- MARKDOWN -----
+### 3.1 Histograms of Expectation Responses
+We map the mass distribution for inflation expectations, house price changes, unemployment probability, and stock market probability using Matplotlib.
+
+----- CODE -----
+# 3.1 Histograms of continuous targets
+
+# Using a streamlined subplot matrix for cleaner notebook rendering (Concept heavily utilized in Workshops 08/09)
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+axes = axes.flatten()
+
+# expectation_vars defined earlier: ['infl_1y', 'house_price_change', 'prob_unrate_up', 'prob_stocks_up']
+for i, col in enumerate(expectation_vars):
+    # Generating 10 bins strictly against valid target values
+    axes[i].hist(df_sce[col].dropna(), bins=10, color='steelblue', edgecolor='black', alpha=0.75)
+    axes[i].set_title(f'Distribution of {col}', fontsize=14, fontweight='bold')
+    axes[i].set_ylabel('Frequency / Respondents')
+    axes[i].set_xlabel('Surveyed Value')
+    axes[i].grid(axis='y', alpha=0.4, linestyle='--')
+
+plt.tight_layout()
+plt.show()
+
+----- MARKDOWN -----
+### 3.2 Time Series of Averages & Optimist Fractions
+We aggregate our granular panel dataset into singular monthly timestamps utilizing pandas `.groupby('date').mean()`. This naturally outputs both the global average for continuous indicators, and natively calculates the population percentage 'fraction' for our binary optimist indicators.
+
+----- CODE -----
+# 3.2 Time series of Averages and Optimist percentages
+
+# Consolidate the dataset cross-sectionally for every month
+# Set datetime as index and resample to Quarterly End ('QE') frequency to smoothly aggregate daily volatility over time
+time_series_df = df_sce.set_index('date').resample('QE').mean(numeric_only=True)
+
+optimist_vars = ['optimist_unrate', 'optimist_stocks', 'optimist_house_price']
+
+# Stack continuous targets alongside binary variants
+all_vars_to_plot = expectation_vars + optimist_vars
+
+n_cols = 3
+n_rows = int(np.ceil(len(all_vars_to_plot) / n_cols))
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 5 * n_rows))
+axes = axes.flatten()
+
+for i, col in enumerate(all_vars_to_plot):
+    axes[i].plot(time_series_df.index, time_series_df[col], color='darkred', linewidth=2)
+    
+    if col in optimist_vars:
+        axes[i].set_title(f'Fraction of {col}', fontsize=12, fontweight='bold')
+        axes[i].set_ylabel('Population Fraction (0 to 1)')
+    else:
+        axes[i].set_title(f'Average {col} over time', fontsize=12, fontweight='bold')
+        axes[i].set_ylabel('Average Value')
+        
+    axes[i].set_xlabel('Survey Date')
+    axes[i].grid(True, alpha=0.3)
+
+# Remove any empty subplots iteratively
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+
+----- MARKDOWN -----
+## Part 4 - Exploratory Data Analysis (Macro/Finance)
+We visualize the temporal progression of the macro-finance anchors acting as regressors in our subsequent pipeline.
+
+----- MARKDOWN -----
+### 4.1 Original Macro Variables (Base Levels)
+Time series arrays tracking the absolute raw rates and levels of our economic covariates seamlessly bound within the SCE survey timeframe.
+
+----- CODE -----
+# 4.1 Plot original variables in levels
+
+# Target baseline macro variables intrinsically devoid of our trailing math operations
+base_macro_vars = ['cpi', 'unrate', 'gdp', 'mortgage', 'fedfunds', 'house_idx', 'sp500', 'dollar', 'oil']
+
+# Synthesize filtering boundaries from the original SCE matrix (aligning visual scopes)
+start_date = df_sce['date'].min()
+end_date = df_sce['date'].max()
+
+macro_plot_df = df_macro[(df_macro['date'] >= start_date) & (df_macro['date'] <= end_date)]
+
+n_cols = 3
+n_rows = int(np.ceil(len(base_macro_vars)) / n_cols)
+
+# Implementing standard Workshop 08 style facet grids
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 4 * n_rows))
+axes = axes.flatten()
+
+for i, col in enumerate(base_macro_vars):
+    if col in macro_plot_df.columns:
+        axes[i].plot(macro_plot_df['date'], macro_plot_df[col], color='darkblue', linewidth=2)
+        axes[i].set_title(f'Baseline Level: {col.upper()}', fontsize=12, fontweight='bold')
+        axes[i].set_ylabel('Raw Indexed Value/Rate')
+        axes[i].set_xlabel('Date')
+        axes[i].grid(axis='both', alpha=0.3)
+
+# Clear unused axes organically
+for j in range(len(base_macro_vars), len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+
+----- MARKDOWN -----
+### 4.2 Plot Engineered Variables (Relative vs Absolute Differences)
+As detailed rigidly in our economic motivation, we seamlessly plot the 12-month momentum vectors computed earlier. To enforce mathematical integrity, we explicitly assign absolute quantitative differences (`_diff12`) for rate-based variables, while using pure proportional percentage changes (`_pct12`) for indices and nominal features.
+
+----- CODE -----
+# 4.2 Plot strictly relevant trailing momentum equations
+
+# We selectively define the optimal trailing indicator target for each column category 
+# (Matching the exact psychological logic constructed in block 2.3)
+momentum_vars = [
+    'cpi_pct12', 'gdp_pct12', 'house_idx_pct12', 
+    'sp500_pct12', 'dollar_pct12', 'oil_pct12', 
+    'unrate_diff12', 'fedfunds_diff12', 'mortgage_diff12'
+]
+
+n_cols = 3
+n_rows = int(np.ceil(len(momentum_vars)) / n_cols)
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 4 * n_rows))
+axes = axes.flatten()
+
+for i, col in enumerate(momentum_vars):
+    if col in macro_plot_df.columns:
+        axes[i].plot(macro_plot_df['date'], macro_plot_df[col], color='darkgreen', linewidth=2)
+        
+        # Subtly format styling dynamically based on statistical trait
+        if 'pct' in col:
+            axes[i].set_title(f'12-Month Rel Change: {col.split("_")[0].upper()}', fontsize=12, fontweight='bold')
+            axes[i].set_ylabel('Percentage Shift (%)')
+        else:
+            axes[i].set_title(f'12-Month Abs Diff: {col.split("_")[0].upper()}', fontsize=12, fontweight='bold')
+            axes[i].set_ylabel('Absolute Shift')
+            
+        axes[i].set_xlabel('Date')
+        
+        # Provide a mathematical baseline 0-line benchmark marker 
+        axes[i].axhline(0, color='black', linestyle='-.', linewidth=1.2, alpha=0.6)
+        axes[i].grid(axis='both', alpha=0.3)
+
+# Wipe out empty axes organically
+for j in range(len(momentum_vars), len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+
+----- MARKDOWN -----
+### 4.3 Correlation Tables (Expectation vs. Macro Indicators)
+We investigate causal linkages by generating explicit correlation tables mapping our four continuous consumer expectation queries against every macroeconomic variable we intend to use. The output arrays are rigorously sorted by absolute magnitude so the strongest behavioral impact drivers (whether positive or inverse) inherently bubble to the top.
+
+----- CODE -----
+# 4.3 Print out detailed mathematical correlation structures
+
+# We assemble the collective list of macro features we are integrating into our models
+# We employ the target robust indicators mathematically defined in 4.1 and 4.2
+all_macro_features = base_macro_vars + momentum_vars
+
+# Utilizing IPython Display to output clean HTML tables per variable
+
+for target in expectation_vars:
+    print(f"\n{'='*65}")
+    print(f" Macroeconomic variables most highly correlated with '{target.upper()}' ")
+    print(f"{'='*65}")
+    
+    # We utilize pandas .corrwith() which is computationally superior for 1-to-many dimensional arrays
+    # rather than building out the complete NxN generalized .corr() matrix.
+    corr_series = df_final[all_macro_features].corrwith(df_final[target])
+    
+    # We sort by the ABSOLUTE magnitude of the relationship.
+    # In regression, a dense -0.7 inverse correlation is just as predictive as a +0.7 positive correlation!
+    corr_sorted = corr_series.reindex(corr_series.abs().sort_values(ascending=False).index)
+    
+    # We cast to a dataframe dynamically, format as styled HTML, and output the absolute top-10 parameters
+    df_output = corr_sorted.head(10).to_frame(name='Coefficient Rate')
+    display(df_output.style.background_gradient(cmap='coolwarm', axis=0).format("{:.4f}"))
+
+----- MARKDOWN -----
+## Part 5 - Predicting Continuous Expectations
+
+In this section, we build predictive machine learning models for the four continuous expectation targets: `infl_1y`, `house_price_change`, `prob_unrate_up`, and `prob_stocks_up`. We construct robust algorithms ensuring chronologically valid Train/Test boundaries mapping over the explicit 2024 boundary constraint.
+
+----- MARKDOWN -----
+**Model Architecture & Scaling Requirements:**
+*   **Feature Scaling:** Natively required! Both Ridge and Lasso estimators apply absolute penalty constraints ($\mathcal{L}_1$ / $\mathcal{L}_2$ norms) to regression coefficients. If variables are on entirely different numerical scales (e.g., S&P 500 at 4500 vs. Unemployment Rate at 0.04), the penalty mechanism structurally collapses. Therefore, we rigidly nest `StandardScaler()` directly into our `Pipeline` to normalize all features internally utilizing only the training fold distribution.
+*   **Hyperparameters:**
+    *   `LinearRegression`: No hyperparameters required. It solves the ordinary least squares natively.
+    *   `RidgeCV` & `LassoCV`: Both mathematically depend on the Penalty Strength Hyperparameter (`alpha`). We implement internal cross-validation mechanisms searching a massive multidimensional logarithmic grid of potential alpha candidates dynamically resolving the optimal configuration.
+
+----- MARKDOWN -----
+### 5.1 Environment Setup & Feature Groups
+
+----- CODE -----
+# 5.1 Environment Configuration & Preprocessing
+warnings.filterwarnings('ignore') # Filter standard scikit-learn warnings
+
+df_model = pd.get_dummies(df_final, columns=[c for c in initial_wave_vars if c in ['educ']], drop_first=True)
+
+train_mask = df_model['date'] < '2024-01-01'
+df_train = df_model[train_mask]
+df_test = df_model[~train_mask]
+
+feature_sets = {
+    'Macro Only': all_macro_features,
+    'Macro + SCE': all_macro_features + [c for c in df_model.columns if c.startswith('educ_')] + [c for c in initial_wave_vars if c != 'educ']
+}
+
+----- MARKDOWN -----
+### 5.2 Isolated Helper Functions
+To maximize reuse parameter structure seamlessly, all training loops and plot computations are ripped out of sequential chains and mapped into universally callable standard functions defined explicitly within their own respective cells.
+
+----- CODE -----
+# Helper Function 1: Machine Learning Evaluation Architecture (No Graphical Overlay)
+
+def calculate_continuous_regression(target, feature_set_name, features):
+    df_eval = df_model[['date', target] + features].dropna().copy()
+    
+    mask = df_eval['date'] < '2024-01-01'
+    X_train, y_train = df_eval[mask][features], df_eval[mask][target]
+    X_test, y_test   = df_eval[~mask][features],  df_eval[~mask][target]
+    
+    models = {
+        'LinearRegression': LinearRegression(),
+        'RidgeCV': RidgeCV(alphas=np.logspace(-2, 4, 30), store_cv_results=True),
+        'LassoCV': LassoCV(alphas=np.logspace(-4, 2, 30), cv=5, max_iter=20000, n_jobs=-1, selection='random')
+    }
+    
+    outputs = []
+    
+    for model_name, estimator in models.items():
+        pipe = Pipeline([('scaler', StandardScaler()), ('model', estimator)])
+        pipe.fit(X_train, y_train)
+        fitted = pipe.named_steps['model']
+        
+        best_alpha = None
+        cv_validation_mse = None
+        
+        if model_name in ['RidgeCV', 'LassoCV']:
+            best_alpha = fitted.alpha_
+            # Extract optimal CV score dynamically
+            if model_name == 'RidgeCV':
+                if hasattr(fitted, 'cv_results_') and isinstance(fitted.cv_results_, dict):
+                    cv_mse_path = fitted.cv_results_['mean_test_score']
+                    cv_validation_mse = np.abs(np.max(cv_mse_path)) if np.mean(cv_mse_path) <= 0 else np.min(cv_mse_path)
+                else:
+                    res = fitted.cv_results_ if hasattr(fitted, 'cv_results_') else fitted.cv_values_
+                    cv_validation_mse = np.min(np.mean(res, axis=0))
+            elif model_name == 'LassoCV':
+                cv_validation_mse = np.min(np.mean(fitted.mse_path_, axis=1))
+        
+        y_test_pred = pipe.predict(X_test)
+        rmse_test = np.sqrt(mean_squared_error(y_test, y_test_pred))
+        r2_test = r2_score(y_test, y_test_pred)
+        
+        # We append a massively comprehensive output object preserving the physical pipeline model seamlessly!
+        outputs.append({
+            'Target Variable': target,
+            'Feature Depth': feature_set_name,
+            'Regressive Algorithm': model_name,
+            'Optimized Alpha': best_alpha,
+            'Validation CV MSE': cv_validation_mse,
+            'Test OOS RMSE': rmse_test,
+            'Test OOS R2': r2_test,
+            'model_pipeline': pipe,
+            'df_eval_used': df_eval, # Passing isolated cleaned datasets
+            'features_used': features
+        })
+        
+    return outputs
+
+----- CODE -----
+# Helper Function 2: Validation Curve Renderer
+
+def plot_validation_curve(model_output_entry):
+    pipe = model_output_entry['model_pipeline']
+    m_name = model_output_entry['Regressive Algorithm']
+    target = model_output_entry['Target Variable']
+    fitted = pipe.named_steps['model']
+    
+    if m_name == 'LinearRegression':
+        print(f"LinearRegression possesses no hyperparameter iterations to natively trace/plot for {target}.")
+        return
+        
+    if m_name == 'RidgeCV':
+        if hasattr(fitted, 'cv_results_') and isinstance(fitted.cv_results_, dict):
+            cv_mse = fitted.cv_results_['mean_test_score']
+            if np.mean(cv_mse) <= 0: cv_mse = -cv_mse
+        else:
+            res = fitted.cv_results_ if hasattr(fitted, 'cv_results_') else fitted.cv_values_
+            cv_mse = np.mean(res, axis=0)
+            
+        alphas = fitted.alphas
+        color = 'royalblue'
+        
+    elif m_name == 'LassoCV':
+        cv_mse = np.mean(fitted.mse_path_, axis=1)
+        alphas = fitted.alphas_
+        color = 'firebrick'
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+    ax.plot(np.log10(alphas), cv_mse, marker='s', markersize=4, color=color)
+    ax.set_title(f'{m_name} Cross-Validation Path ({target})', fontsize=10, fontweight='bold')
+    ax.set_xlabel('log10(Alpha Penalty Strength)')
+    ax.set_ylabel('Mean Squared Error (MSE)')
+    ax.grid(True, alpha=0.3)
+    return fig
+
+----- CODE -----
+# Helper Function 3: Time-Series Predictor Overlay Graphics
+def plot_forecast_overlay(model_output_entry):
+    pipe = model_output_entry['model_pipeline']
+    df_eval = model_output_entry['df_eval_used'].copy()
+    features = model_output_entry['features_used']
+    target = model_output_entry['Target Variable']
+    model_name = model_output_entry['Regressive Algorithm']
+    f_set = model_output_entry['Feature Depth']
+    
+    X_all = df_eval[features]
+    df_eval['y_predicted'] = pipe.predict(X_all)
+    
+    ts_act = df_eval.groupby('date')[target].mean()
+    ts_pred = df_eval.groupby('date')['y_predicted'].mean()
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(ts_act.index, ts_act.values, label='Actual Realized Average', color='gray', alpha=0.7)
+    ax.plot(ts_pred.index, ts_pred.values, label='Model Expected Horizon', color='teal', linewidth=2)
+    ax.axvline(pd.to_datetime('2024-01-01'), color='red', linestyle='--', label='Validation Boundary (2024)')
+    ax.set_title(f"Forecaster Output: {target} | {model_name} ({f_set})", fontsize=11, fontweight='bold')
+    ax.set_xlabel('Global Timeline')
+    ax.set_ylabel('Levels Recorded')
+    ax.legend(loc='upper left')
+    ax.grid(alpha=0.3)
+    return fig
+
+----- MARKDOWN -----
+### 5.3 Model Execution Loop
+We sequentially iterate the defined standard scaled pipelines computing optimal evaluation trajectories mapping across the categorical covariates.
+
+----- CODE -----
+# Execute Part 5 Computations
+master_results_pt5 = []
+
+for target in expectation_vars:
+    for feature_name, feature_data in feature_sets.items():
+        results = calculate_continuous_regression(target, feature_name, feature_data)
+        master_results_pt5.extend(results)
+        
+print("Execution Completed cleanly!")
+print(f"Total Models Generated: {len(master_results_pt5)}")
+
+----- MARKDOWN -----
+### 5.4 Graph Visualization Validation
+We natively test and output structural target graphs iteratively in standalone cells to perfectly satisfy layout requirements.
+
+----- CODE -----
+# Generating explicit sample outputs for Inflation Target natively in its own cell as required
+inflation_ridge_model = [m for m in master_results_pt5 if m['Target Variable'] == 'infl_1y' and m['Regressive Algorithm'] == 'RidgeCV' and m['Feature Depth'] == 'Macro + SCE'][0]
+
+fig1 = plot_validation_curve(inflation_ridge_model)
+fig2 = plot_forecast_overlay(inflation_ridge_model)
+plt.show()
+
+----- MARKDOWN -----
+### 5.5 Leaderboard Results Matrix
+
+----- CODE -----
+# 5.5 Render strictly tabular Leaderboard mappings
+# Isolate solely text representations filtering the physical Pipeline dictionary key out globally
+output_df = pd.DataFrame([{k:v for k,v in obj.items() if k not in ['model_pipeline', 'df_eval_used', 'features_used']} for obj in master_results_pt5])
+output_df = output_df.sort_values(by=['Target Variable', 'Test OOS RMSE'], ascending=[True, True])
+output_df.style.format(precision=4).background_gradient(subset=['Test OOS RMSE'], cmap='viridis_r')
+
+----- MARKDOWN -----
+**Substantial Improvement Analysis (Macro Only vs. Macro + SCE demographics):**
+As evident across our tabular Leaderboards, physically mapping in individual respondent statistics (`Macro + SCE`) almost universally **does not** generate a *massive* leap in predictive mathematical stability (`RMSE`) compared to the `Macro Only` baseline iterations.
+
+While demographic subsets do slightly influence mathematical loss outcomes, the core explanatory power driving these specific expectations is aggressively derived from the large-scale macroeconomic momentum indicators (S&P 500, Dollar Index, etc). Adding more micro-demographic variables begins to inject noise, demonstrating that behavioral inflation/housing expectations are fundamentally dominated by macro-reality exposures rather than idiosyncratic individual demographic traits!
+
+----- MARKDOWN -----
+## Part 6 - Predicting Binary Optimism Variables
+
+We shift our forecasting mechanism to supervised classification algorithms to predict categorical variables defining consumer expectations.
+
+**Hyperparameters & Scaling Context:**
+*   **Feature Scaling:** Required. We deploy `StandardScaler` iteratively inside our pipeline structurally because `LogisticRegressionCV`, heavily reliant on distance-based $\mathcal{L}_2$ regularization penalties natively, requires uniformly standardized distribution geometry to prevent biased gradient shifts. `RandomForestClassifier` is logically immune to scale distortion, but it does not harm convergence mapping to process it through the identical standard configuration.
+*   **Hyperparameters:**
+    *   `LogisticRegressionCV`: Solves dynamically over the inverse regularization strength parameter array (`C`).
+    *   `RandomForestClassifier`: Uses discrete `GridSearchCV` explicitly isolating `n_estimators` (total logical trees) and `max_depth` (terminal constraint threshold) uniformly.
+
+----- MARKDOWN -----
+### 6.1 Isolated Helper Functions (Classification)
+
+----- CODE -----
+# Helper Function 1: Core Classification Engine Definition
+
+def calculate_binary_classification(target, feature_set_name, features):
+    df_eval = df_model[['date', target] + features].dropna().copy()
+    
+    # Establish strict OOS boundaries globally
+    mask = df_eval['date'] < '2024-01-01'
+    X_train, y_train = df_eval[mask][features], df_eval[mask][target]
+    X_test, y_test   = df_eval[~mask][features],  df_eval[~mask][target]
+    
+    outputs = []
+    class_models = ['Logistic Regression', 'Random Forest']
+    
+    for m_name in class_models:
+        if m_name == 'Logistic Regression':
+            # Rigorously implementing cv=5 and n_jobs=-1 internally!
+            pipe = Pipeline([('scaler', StandardScaler()), ('model', LogisticRegressionCV(Cs=10, cv=5, penalty='l2', solver='lbfgs', max_iter=2000, n_jobs=-1))])
+            pipe.fit(X_train, y_train)
+            fitted = pipe
+            best_param = f"Opt. C: {pipe.named_steps['model'].C_[0]:.4f}"
+            
+        elif m_name == 'Random Forest':
+            rf_pipe = Pipeline([('scaler', StandardScaler()), ('model', RandomForestClassifier(random_state=42))])
+            # Aggressively restricting model grid dimensionality explicitly to save RAM memory structures 
+            param_grid = {'model__n_estimators': [50, 100], 'model__max_depth': [5, 10]}
+            search = GridSearchCV(rf_pipe, param_grid, cv=5, scoring='f1', n_jobs=-1)
+            search.fit(X_train, y_train)
+            fitted = search.best_estimator_
+            best_param = str(search.best_params_)
+
+        # Calculate Training sample variables recursively as requested
+        y_train_hat = fitted.predict(X_train)
+        y_test_hat = fitted.predict(X_test)
+        
+        outputs.append({
+            'Target': target,
+            'Features': feature_set_name,
+            'Classifier': m_name,
+            'Opt Parameters': best_param,
+            'Train Acc': accuracy_score(y_train, y_train_hat),
+            'Train Prec': precision_score(y_train, y_train_hat, zero_division=0),
+            'Train Rec': recall_score(y_train, y_train_hat, zero_division=0),
+            'Train F1': f1_score(y_train, y_train_hat, zero_division=0),
+            'Test Acc': accuracy_score(y_test, y_test_hat),
+            'Test Prec': precision_score(y_test, y_test_hat, zero_division=0),
+            'Test Rec': recall_score(y_test, y_test_hat, zero_division=0),
+            'Test F1': f1_score(y_test, y_test_hat, zero_division=0),
+            'Test Acc': accuracy_score(y_test, y_test_hat),
+            'Test Prec': precision_score(y_test, y_test_hat, zero_division=0),
+            'Test Rec': recall_score(y_test, y_test_hat, zero_division=0),
+            'model_pipeline': fitted,
+            'df_eval_used': df_eval,
+            'features_used': features
+        })
+    return outputs
+
+----- CODE -----
+# Helper Function 2: Fractional Probability Visualizations
+def plot_fractional_forecast(model_output_entry):
+    pipe = model_output_entry['model_pipeline']
+    df_eval = model_output_entry['df_eval_used'].copy()
+    features = model_output_entry['features_used']
+    target = model_output_entry['Target']
+    model_name = model_output_entry['Classifier']
+    f_set = model_output_entry['Features']
+    
+    X_all = df_eval[features]
+    df_eval['y_predicted'] = pipe.predict(X_all)
+    
+    ts_act = df_eval.groupby('date')[target].mean()
+    ts_pred = df_eval.groupby('date')['y_predicted'].mean()
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(ts_act.index, ts_act.values, label='Actual Optimist Fraction', color='gray', alpha=0.7)
+    ax.plot(ts_pred.index, ts_pred.values, label='Model Expected Population Fractional Mass', color='purple', linewidth=2)
+    ax.axvline(pd.to_datetime('2024-01-01'), color='red', linestyle='--', label='Validation Boundary (2024)')
+    ax.set_title(f"Optimist Probability Output: {target} | {model_name} ({f_set})", fontsize=11, fontweight='bold')
+    ax.set_xlabel('Survey Timeline Tracker')
+    ax.set_ylabel('Proportional Optimist Array Fraction (0-1)')
+    ax.legend(loc='upper left')
+    ax.grid(alpha=0.3)
+    return fig
+
+----- MARKDOWN -----
+### 6.2 Global Loop Execution
+**Mathematical Phenomenon Check (Macro Homogeneity):**
+When running binary classifications strictly on the `Macro Only` feature set, the model naturally predicts the exact same target label for every single respondent within a given month. This is not a bug; it is a mathematical certainty. Because all respondents surveyed in "May 2024" possess the exact same generic S&P 500 and FEDFUNDS covariate inputs, the algorithm physically cannot differentiate between them. The inclusion of the `Macro + SCE` demographic factors in the secondary loop is designed specifically to fracture this homogeneity, allowing for targeted idiosyncratic respondent probability branching.
+
+----- MARKDOWN -----
+### 6.2 Global Loop Execution
+
+----- CODE -----
+# Initialize arrays natively
+master_results_pt6 = []
+optimist_vars = ['optimist_unrate', 'optimist_stocks', 'optimist_house_price']
+
+# Standard iterative process decoupled visually from graphics
+for target in optimist_vars:
+    for feature_name, feature_data in feature_sets.items():
+        results = calculate_binary_classification(target, feature_name, feature_data)
+        master_results_pt6.extend(results)
+        
+print("Execution Completed cleanly without plotting interference!")
+print(f"Total Classification Models Scaled: {len(master_results_pt6)}")
+
+----- MARKDOWN -----
+### 6.3 Targeted Graph Validation Rendering
+In direct accordance with structural formatting protocols, we execute our standalone helper plot routines dynamically generating isolated frames exclusively in standalone cells!
+
+----- CODE -----
+# Generating visualization matrices distinctly mapped into a dedicated single cell natively
+sample_class_model = [m for m in master_results_pt6 if m['Target'] == 'optimist_unrate' and m['Classifier'] == 'Random Forest' and m['Features'] == 'Macro + SCE'][0]
+
+fig_cls = plot_fractional_forecast(sample_class_model)
+plt.show()
+
+----- MARKDOWN -----
+### 6.4 Classification Data Master Leaderboard
+
+----- CODE -----
+# Map structural matrices onto an automated Pandas display
+output_df_cls = pd.DataFrame([{k:v for k,v in obj.items() if k not in ['model_pipeline', 'df_eval_used', 'features_used']} for obj in master_results_pt6])
+output_df_cls = output_df_cls.sort_values(by=['Target', 'Test F1'], ascending=[True, False])
+output_df_cls.style.format(precision=4).background_gradient(subset=['Test F1'], cmap='magma')
+
+----- MARKDOWN -----
+**Substantial Improvement Analysis (Classification Constraints):**
+Evaluating the Out-Of-Sample prediction capabilities represented heavily through F1 validation and pure metric Accuracy outputs, supplementing our `Macro` models mechanically by utilizing the nested Survey demographics (`Macro + SCE`) yields effectively negligible precision uplifts.
+
+Similar to our isolated continuous regression findings, attempting to forecast systemic directional sentiment concerning national unemployment rates or global stock market bounds requires anchoring primarily on mathematically scaled trailing Macro metrics. The random idiosyncratic traits represented specifically within SCE variables injects computational variance without generating a reliable probability predictive yield.
+
+----- MARKDOWN -----
+### Policy Maker Constraints & Data Separation
+To strictly simulate real-world forecasting boundaries as outlined in the Term Paper guidelines, we aggressively restricted our `Macro + SCE` feature parameters. We completely excluded any *forward-looking* alternative survey constraints (e.g., 3-year inflation projections) and intentionally banned *backward-looking* conditional responses (e.g., "did your finances improve last year"). A real-time Central Bank policy maker operating out-of-time would not physically possess those survey variables. Instead, we rigidly formulated our inputs using exclusively "stable" demographics—`Education`, `Homeowner Status`, `Financial Literacy Tests`, and `Gender`—paired with absolute chronological macroeconomic momentum matrices.
+
+### Feature Architecture Efficacy (Macro vs. Micro Constraints)
+The foundation of analyzing expectations involves measuring if adding granular individual-level subsets (`Macro + SCE`) substantially amplifies predictive forecasting compared to universal external anchors (`Macro Only`). 
+
+Our results demonstrate that **Macroeconomic aggregates intrinsically dominate baseline shifting trends.** Although the algorithm's global out-of-sample $R^2$ evaluates low (a completely expected reality when traversing ~5% accuracy bounds mapping chaotic, noisy human psychological polling data), adding the highly-dimensional dummy matrix mapping individual demographics largely yielded negligible—and sometimes regressive—loss-metric improvements on our strictly partitioned 2024 test environment. The random variance inherent to individual idiosyncratic reporting effectively caps systemic predictive yield.
+
+### Algorithmic Superiority (Model Performance)
+*   **Continuous Expectations:** Advanced penalized estimations (`RidgeCV`) natively yielded the lowest continuous loss (`RMSE`), successfully mapping collinear macro momentum signals without catastrophically discarding vectors like `LassoCV`. Ordinary `LinearRegression` aggressively failed out-of-time generalizability due directly to systemic matrix over-fitting.
+*   **Binary Classifications:** The `RandomForestClassifier` vastly outperformed geometric constraints on the validation data. Importantly, while the `Macro Only` baseline is mathematically forced to predict identical classes (all 1s or all 0s) for every respondent sharing a singular month, transitioning to `Macro + SCE` intelligently fractures that ceiling, capturing distinct non-linear behavioral clustering underlying human optimism!
+
+----- MARKDOWN -----
+### 7.1 Continuous Expectations Evaluation
+The matrix below objectively orders the continuous forecasting engines by absolute minimum error parameter (RMSE), tracking model behavior sequentially across all hyperparameter boundaries.
+
+----- CODE -----
+# Output strictly continuous matrix natively devoid of display/HTML plugins
+output_df.style.format(precision=4).background_gradient(subset=['Test OOS RMSE'], cmap='viridis_r')
+
+----- MARKDOWN -----
+### 7.2 Binary Probability Evaluation
+The matrix below establishes hierarchy for classification forecasting accuracy natively sorted chronologically utilizing the structural Test validation F1-Score.
+
+----- CODE -----
+# Output strictly categorical probability matrix via native Jupyter cell bounding
+output_df_cls.style.format(precision=4).background_gradient(subset=['Test F1'], cmap='magma')
+
