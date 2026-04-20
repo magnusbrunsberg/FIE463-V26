@@ -666,8 +666,8 @@ def plot_forecast_overlay(model_output_entry, ax=None):
     X_all = df_eval[features]
     df_eval['y_predicted'] = pipe.predict(X_all)
     
-    ts_act = df_eval.groupby('date')[target].mean()
-    ts_pred = df_eval.groupby('date')['y_predicted'].mean()
+    ts_act = df_eval.set_index('date').resample('ME')[target].mean()
+    ts_pred = df_eval.set_index('date').resample('ME')['y_predicted'].mean()
     
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 4))
@@ -899,8 +899,8 @@ def plot_fractional_forecast(model_output_entry, ax=None):
     X_all = df_eval[features]
     df_eval['y_predicted'] = pipe.predict_proba(X_all)[:, 1]
     
-    ts_act = df_eval.groupby('date')[target].mean()
-    ts_pred = df_eval.groupby('date')['y_predicted'].mean()
+    ts_act = df_eval.set_index('date').resample('ME')[target].mean()
+    ts_pred = df_eval.set_index('date').resample('ME')['y_predicted'].mean()
     
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 4))
