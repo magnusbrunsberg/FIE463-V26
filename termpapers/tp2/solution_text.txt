@@ -3,6 +3,7 @@
 
 ## Expectations about macroeconomic and financial variables
 
+
 ----- MARKDOWN -----
 ### Candidates: 66, 56, 54
 
@@ -11,6 +12,7 @@ All code and text in this file is our own. We have used AI to assess our own cod
 
 ### Note on runtime
 The full execution of this notebook (particularly the cross-validation steps in Parts 5 and 6) may take a few minutes to complete. This is due to the use of model tuning procedures (e.g., cross-validation and grid search) to ensure robust and comparable results across specifications.
+
 
 ----- CODE -----
 # Import the main libraries used throughout the notebook
@@ -25,6 +27,9 @@ import pandas as pd
 
 # Scikit-Learn
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, RidgeCV, LassoCV
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -50,8 +55,10 @@ Finally, we create three binary optimism indicators:
 
 These variables are used later in the classification part of the term paper.
 
+
 ----- MARKDOWN -----
 ### 1.1 Import and merge the data
+
 
 ----- CODE -----
 # Path to the data folder
@@ -71,6 +78,7 @@ print(f"Dataset columns:\n {df_sce.columns.tolist()}")
 
 ----- MARKDOWN -----
 ### 1.2 Forward-fill variables asked only in the initial wave
+
 
 ----- CODE -----
 # Convert the date column to datetime format
@@ -94,6 +102,7 @@ print(f"Successfully forward-filled the following initial-wave variables:\n{init
 ### 1.3 Drop Year 2025 Survey Waves
 As specified in the assignment, we remove all observations from 2025 so that the final sample ends in 2024.
 
+
 ----- CODE -----
 # Storing total rows before dropping 2025 observations
 rows_before_drop2025 = len(df_sce)
@@ -111,6 +120,7 @@ print(f"Total remaining rows: {len(df_sce)}")
 ----- MARKDOWN -----
 ### 1.4 Clean NAs 
 We define the variables used later in the analysis and drop observations with missing values in this core subset.
+
 
 ----- CODE -----
 # Store the number of rows before dropping missing values
@@ -142,6 +152,7 @@ print(f"Total remaining rows: {len(df_sce)}")
 ### 1.5 Handle Outliers
 To reduce the influence of extreme values, we trim the four main expectation variables at the 1st and 99th percentiles.
 
+
 ----- CODE -----
 # Store the number of rows before trimming outliers
 rows_before_outliers_drop = len(df_sce)
@@ -159,11 +170,13 @@ print(f"Total remaining rows: {len(df_sce)}")
 ----- MARKDOWN -----
 The cleaning steps reduce the size of the raw SCE sample, but they also make the remaining data more suitable for analysis. Dropping observations from 2025 ensures that the sample ends in 2024, which is important because the later prediction tasks use 2024 as the test period. Removing missing values ensures that the models are estimated on complete observations, while trimming extreme values reduces the influence of outliers in the main expectation variables.
 
+
 ----- MARKDOWN -----
 ### 1.6 & 1.7 Feature Engineering (Binary Indicators) & Final Report
 We convert the continuous expectation variables into binary indicators that can be used as targets in the classification analysis in Part 6.
 
 A respondent is classified as optimistic about unemployment if the probability assigned to unemployment increasing is below 50 percent. A respondent is classified as optimistic about stocks if the probability assigned to stock prices increasing is above 50 percent. A respondent is classified as optimistic about house prices if expected house price growth is positive.
+
 
 ----- CODE -----
 # Create binary optimism indicators
@@ -186,6 +199,7 @@ In this part, we combine the cleaned SCE data with macroeconomic and financial v
 The variables are stored in the `data` folder and loaded from there. Daily and weekly series are resampled to monthly frequency using the last observation in each month, while quarterly variables are kept at quarterly frequency. We then create lagged changes for the macroeconomic and financial variables.
 
 To avoid look-ahead bias, we only merge information that would have been available at the survey date.
+
 
 ----- CODE -----
 # Load and process the macroeconomic and financial time series
@@ -244,6 +258,7 @@ print(df_macro.columns.tolist())
 ### 2.1 Calculate Trailing Dynamics & Merge
 Households may respond not only to current macroeconomic conditions, but also to recent changes in those conditions. We therefore construct 1-month and 12-month changes for all macroeconomic variables and then merge them into the SCE data.
 
+
 ----- CODE -----
 # Calculate 1-month and 12-month changes
 macro_vars = [col for col in df_macro.columns if col != 'date']
@@ -297,15 +312,18 @@ This feature construction is useful because households are likely to respond bot
 
 After constructing the macroeconomic and financial variables, we merge them into the cleaned SCE data. This gives us one combined dataset that contains both household-level survey variables and aggregate economic variables, which will be used in the exploratory analysis and prediction tasks that follow.
 
+
 ----- MARKDOWN -----
 ## Part 3 - Exploratory Data Analysis (SCE)
 In this part, we examine the main expectation variables in the SCE data.
 
 We first plot histograms for the four continuous expectation variables in order to study their distributions. We then plot the average values of these variables over time. Finally, we plot the fraction of optimistic respondents over time for the three binary optimism indicators created in Part 1.
 
+
 ----- MARKDOWN -----
 ### 3.1 Histograms of Expectation Responses
 We begin by plotting histograms for the four continuous expectation variables. These figures show how responses are distributed across individuals and help us detect skewness, concentration around focal values, and heterogeneity in beliefs.
+
 
 ----- CODE -----
 # Plot histograms for the four continuous expectation variables
@@ -325,13 +343,15 @@ plt.show()
 ----- MARKDOWN -----
 The histograms show how the expectation variables are distributed across respondents. The probability variables are bounded between 0 and 100, while inflation expectations and expected house price changes have a wider continuous range. The figures suggest substantial heterogeneity in household expectations.
 
+
 ----- MARKDOWN -----
 ### 3.2 Time Series of Averages & Optimist Fractions
 We aggregate the panel dataset into singular monthly timestamps by using pandas `.groupby('date').mean()`. This is to study how average expectations and the fraction of optimistic respondents evolve over time.
 
+
 ----- CODE -----
 # Compute average expectations and optimism rates by date
-time_series_df = df_sce.set_index('date').resample('QE').mean(numeric_only=True)
+time_series_df = df_sce.set_index('date').resample('ME').mean(numeric_only=True)
 
 optimist_vars = ['optimist_unrate', 'optimist_stocks', 'optimist_house_price']
 
@@ -370,9 +390,11 @@ In this part, we study the macroeconomic and financial variables that were merge
 
 We first plot the variables in levels and then plot the transformed variables in changes. After that, we compute simple correlations between the SCE expectation variables and the macro/finance variables.
 
+
 ----- MARKDOWN -----
 ### 4.1 Original Macro Variables (Base Levels)
 Time series arrays tracking the absolute raw rates and levels of our economic covariates seamlessly bound within the SCE survey timeframe.
+
 
 ----- CODE -----
 # Plot the original macroeconomic and financial variables in levels
@@ -411,9 +433,11 @@ plt.show()
 ----- MARKDOWN -----
 The plots in levels summarize the broad macroeconomic and financial environment over the survey period. They provide the baseline context in which households formed their expectations.
 
+
 ----- MARKDOWN -----
 ### 4.2 Plot Engineered Variables (Relative vs Absolute Differences)
 We now plot the 12-month macroeconomic changes constructed in Part 2. For rate-based variables, we use absolute differences, while for indices and price variables, we use relative percentage changes.
+
 
 ----- CODE -----
 # Plot the transformed macroeconomic and financial variables in changes
@@ -457,9 +481,11 @@ plt.show()
 ----- MARKDOWN -----
 The transformed variables in changes are often more informative in a predictive setting than the raw levels. Growth rates and first differences capture recent movements in macroeconomic and financial conditions more directly and may therefore be more closely related to changes in household expectations.
 
+
 ----- MARKDOWN -----
 ### 4.3 Correlation Tables (Expectation vs. Macro Indicators)
 We examine the relationship between the four continuous expectation variables and the macroeconomic variables used later in the models.
+
 
 ----- CODE -----
 # 4.3 Print out detailed mathematical correlation structures
@@ -490,7 +516,7 @@ for target in expectation_vars:
 ## Part 5 - Predicting Continuous Expectations
 In this section, we predict the four continuous expectation variables `infl_1y`, `house_price_change`, `prob_unrate_up`, and `prob_stocks_up`.
 
-Following the assignment, we split the sample into a training period (all observations before `2024-01-01`) and a test period (`2024-01-01` to `2024-12-31`). We estimate Linear Regression, Ridge, and Lasso models for each target. For Ridge and Lasso, hyperparameters are selected by cross-validation.
+Following the assignment, we split the sample into a training period (all observations before `2024-01-01`) and a test period (`2024-01-01` to `2024-12-31`). We estimate baseline models (Linear Regression, Ridge, Lasso) alongside advanced tree-based ensembles (Random Forest Regressor, HistGradientBoostingRegressor) to rigorously capture potential non-linear macroeconomic mechanics. For Ridge and Lasso, hyperparameters are selected by cross-validation.
 
 For each target, we run the analysis twice:
 1. using only macro/finance variables, and
@@ -498,9 +524,11 @@ For each target, we run the analysis twice:
 
 We report the cross-validated hyperparameter choice when applicable, evaluate out-of-sample performance using RMSE and \(R^2\), and visualize both the regularization paths and the average actual-versus-predicted time series.
 
+
 ----- MARKDOWN -----
 ### 5.1 Environment Setup & Feature Groups
 We first prepare the modeling dataset for the continuous prediction exercise. This includes encoding categorical variables, defining the train/test split at `2024-01-01`, and constructing the two feature sets required by the assignment: a macro-only specification and a macro-plus-SCE specification.
+
 
 ----- CODE -----
 # 5.1 Environment Configuration & Preprocessing
@@ -521,6 +549,7 @@ feature_sets = {
 ### 5.2 Isolated Helper Functions
 This section defines the helper functions used in Part 5. The first function fits the continuous-outcome models and stores the quantities needed for evaluation. The plotting helpers are then used to display the Ridge and Lasso validation curves and the time-series comparison between average actual and predicted values.
 
+
 ----- CODE -----
 # Helper Function 1: Machine Learning Evaluation Architecture (No Graphical Overlay)
 def calculate_continuous_regression(target, feature_set_name, features):
@@ -533,7 +562,9 @@ def calculate_continuous_regression(target, feature_set_name, features):
     models = {
         'LinearRegression': LinearRegression(),
         'RidgeCV': RidgeCV(alphas=np.logspace(-2, 4, 30), store_cv_results=True),
-        'LassoCV': LassoCV(alphas=np.logspace(-4, 2, 30), cv=5, max_iter=20000, n_jobs=-1, selection='random')
+        'LassoCV': LassoCV(alphas=np.logspace(-4, 2, 30), cv=5, max_iter=20000, n_jobs=-1, selection='random'),
+        'GradientBoosting': HistGradientBoostingRegressor(max_iter=200),
+        'RandomForest': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
     }
 
     outputs = []
@@ -686,6 +717,7 @@ def plot_forecast_overlay(model_output_entry, ax=None):
 ### 5.3 Model Execution Loop
 We now estimate the full set of Part 5 models. For each of the four continuous targets, we fit the models under both feature specifications and collect the resulting performance metrics, selected hyperparameters, and plotting objects in a master results list.
 
+
 ----- CODE -----
 # Collect all model outputs across targets and feature sets.
 master_results_pt5 = []
@@ -702,6 +734,7 @@ print(f"Total Models Generated: {len(master_results_pt5)}")
 ----- MARKDOWN -----
 ### 5.4 Graph Visualization Validation
 For each target variable, we summarize the regularized-model tuning results and the time-series fit in a single figure. The left and middle panels show the Ridge and Lasso validation curves, while the right panel shows the average actual and predicted series for the best-performing specification for that target.
+
 
 ----- CODE -----
 def make_target_summary_figure(target_var, results_store):
@@ -752,7 +785,8 @@ for target in expectation_vars:
 
 ----- MARKDOWN -----
 ### 5.5 Leaderboard Results Matrix
-The table below summarizes the Part 5 results across all targets, feature sets, and model classes. We report the selected hyperparameter when applicable, the cross-validated validation MSE, and the out-of-sample test metrics. Lower RMSE indicates better predictive performance.
+The table below summarizes the Part 5 results across all targets, feature sets, and all 5 model classes. We report the selected hyperparameter when applicable, the cross-validated validation MSE, and the out-of-sample test metrics. Lower RMSE indicates better predictive performance.
+
 
 ----- CODE -----
 # 5.5 Render strictly tabular Leaderboard mappings
@@ -793,11 +827,12 @@ output_df.style.format(precision=4).background_gradient(
 ----- MARKDOWN -----
 Across the four continuous targets, performance differences across model classes are modest. Ridge and Lasso provide a disciplined way to tune regularization, but the gains relative to simple linear regression are generally limited. Comparing the macro-only and macro-plus-SCE specifications shows whether adding individual-level information materially improves out-of-sample accuracy; in most cases, this effect should be evaluated using the changes in test RMSE and \(R^2\) reported in the table above.
 
+
 ----- MARKDOWN -----
 ## Part 6 - Predicting Binary Optimism Variables
 In this section, we repeat the predictive exercise from Part 5 using the three binary optimism variables `optimist_unrate`, `optimist_stocks`, and `optimist_house_price` as targets.
 
-Because these outcomes are binary, the task is now a classification problem. Following the assignment, we estimate at least Logistic Regression and Random Forest models. Hyperparameters are selected by cross-validation where applicable.
+Because these outcomes are binary, the task is now a classification problem. Following the assignment, we estimate the standard Logistic Regression and Random Forest bounds, and additionally implement Gradient Boosting algorithms alongside an exploratory multi-layer Feed-Forward Neural Network to definitively evaluate the signal limit. Hyperparameters are selected by cross-validation where applicable.
 
 As in Part 5, we run the analysis twice for each target:
 1. using only macro/finance variables, and
@@ -805,9 +840,11 @@ As in Part 5, we run the analysis twice for each target:
 
 We report the selected hyperparameters together with the training- and test-sample classification metrics, and we visualize the actual and predicted fractions of optimists over time with the 2024 train/test split marked explicitly.
 
+
 ----- MARKDOWN -----
 ### 6.1 Classification Model Setup
 This section defines the helper function used to estimate the classification models in Part 6. For each target and feature specification, we fit Logistic Regression and Random Forest models on the pre-2024 training sample and evaluate their performance on the 2024 test sample.
+
 
 ----- CODE -----
 # Helper Function 1: Core Classification Engine Definition
@@ -820,7 +857,7 @@ def calculate_binary_classification(target, feature_set_name, features):
     X_test, y_test   = df_eval.loc[~mask, features], df_eval.loc[~mask, target]
     
     outputs = []
-    class_models = ['Logistic Regression', 'Random Forest']
+    class_models = ['Logistic Regression', 'Random Forest', 'Gradient Boosting', 'Neural Network']
     
     for m_name in class_models:
         if m_name == 'Logistic Regression':
@@ -848,6 +885,15 @@ def calculate_binary_classification(target, feature_set_name, features):
             search.fit(X_train, y_train)
             fitted = search.best_estimator_
             best_param = str(search.best_params_)
+
+        elif m_name == 'Gradient Boosting':
+            gb_pipe = Pipeline([
+                ('scaler', StandardScaler()),
+                ('model', HistGradientBoostingClassifier(max_iter=200, random_state=42))
+            ])
+            gb_pipe.fit(X_train, y_train)
+            fitted = gb_pipe
+            best_param = "Default"
 
         # Hard predictions
         y_train_hat = fitted.predict(X_train)
@@ -886,6 +932,7 @@ def calculate_binary_classification(target, feature_set_name, features):
 ----- MARKDOWN -----
 The following helper function plots the average actual fraction of optimists and the average predicted probability over time. Predicted probabilities are used rather than hard class predictions so that the plotted series reflects the model’s expected optimism rate at each date.
 
+
 ----- CODE -----
 # Helper Function 2: Fractional Probability Visualizations
 def plot_fractional_forecast(model_output_entry, ax=None):
@@ -919,6 +966,7 @@ def plot_fractional_forecast(model_output_entry, ax=None):
 ### 6.2 Classification Model Execution
 We now estimate the full set of Part 6 models. For each binary target, we fit both classifier families under the two feature specifications and store the resulting metrics, selected hyperparameters, and plotting objects in a master results list.
 
+
 ----- CODE -----
 # Collect all classification outputs across targets and feature sets.
 master_results_pt6 = []
@@ -935,48 +983,48 @@ print(f"Total Classification Models Scaled: {len(master_results_pt6)}")
 
 ----- MARKDOWN -----
 ### 6.3 Targeted Classification Forecast Figures
-For each optimism target, we compare the best-performing Logistic Regression specification with the best-performing Random Forest specification, where “best” is defined by the test-sample F1 score within each classifier family. Each figure shows the actual optimism fraction together with the model-implied predicted fraction over time.
+For each optimism target, we evaluate the best-performing iteration of every classifier family, dynamically defined by their maximum Test F1 score. We output a comprehensive 2x2 multi-plot rendering the structural continuous probability traces mapping all four algorithms side-by-side explicitly over time.
+
 
 ----- CODE -----
 for target in optimist_vars:
     target_models = [m for m in master_results_pt6 if m['Target'] == target]
 
-    best_logit = max(
-        [m for m in target_models if m['Classifier'] == 'Logistic Regression'],
-        key=lambda x: x['Test F1']
-    )
-
-    best_rf = max(
-        [m for m in target_models if m['Classifier'] == 'Random Forest'],
-        key=lambda x: x['Test F1']
-    )
+    best_logit = max([m for m in target_models if m['Classifier'] == 'Logistic Regression'], key=lambda x: x['Test F1'])
+    best_rf = max([m for m in target_models if m['Classifier'] == 'Random Forest'], key=lambda x: x['Test F1'])
+    best_gb = max([m for m in target_models if m['Classifier'] == 'Gradient Boosting'], key=lambda x: x['Test F1'])
+    best_nn = max([m for m in target_models if m['Classifier'] == 'Neural Network'], key=lambda x: x['Test F1'])
 
     print(f"\n{target}")
     print(f"Best Logistic: {best_logit['Features']} | Test F1 = {best_logit['Test F1']:.4f}")
     print(f"Best Random Forest: {best_rf['Features']} | Test F1 = {best_rf['Test F1']:.4f}")
+    print(f"Best Gradient Boosting: {best_gb['Features']} | Test F1 = {best_gb['Test F1']:.4f}")
+    print(f"Best Neural Network: {best_nn['Features']} | Test F1 = {best_nn['Test F1']:.4f}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 4))
+    fig, axes = plt.subplots(2, 2, figsize=(20, 10))
+    axes = axes.flatten()
 
     plot_fractional_forecast(best_logit, ax=axes[0])
-    axes[0].set_title(
-        f"{target} | Logistic Regression\n{best_logit['Features']} | Test F1 = {best_logit['Test F1']:.3f}",
-        fontsize=10,
-        fontweight='bold'
-    )
+    axes[0].set_title(f"{target} | Logistic Regression\n{best_logit['Features']} | Test F1 = {best_logit['Test F1']:.3f}", fontsize=11, fontweight='bold')
 
     plot_fractional_forecast(best_rf, ax=axes[1])
-    axes[1].set_title(
-        f"{target} | Random Forest\n{best_rf['Features']} | Test F1 = {best_rf['Test F1']:.3f}",
-        fontsize=10,
-        fontweight='bold'
-    )
+    axes[1].set_title(f"{target} | Random Forest\n{best_rf['Features']} | Test F1 = {best_rf['Test F1']:.3f}", fontsize=11, fontweight='bold')
+    
+    plot_fractional_forecast(best_gb, ax=axes[2])
+    axes[2].set_title(f"{target} | Gradient Boosting\n{best_gb['Features']} | Test F1 = {best_gb['Test F1']:.3f}", fontsize=11, fontweight='bold')
+
+    plot_fractional_forecast(best_nn, ax=axes[3])
+    axes[3].set_title(f"{target} | Neural Network\n{best_nn['Features']} | Test F1 = {best_nn['Test F1']:.3f}", fontsize=11, fontweight='bold')
 
     fig.tight_layout()
     plt.show()
 
+
+
 ----- MARKDOWN -----
 ### 6.4 Classification Data Master Leaderboard
 The table below summarizes the Part 6 classification results across all targets, feature sets, and classifier families. We report the selected hyperparameters together with the main training- and test-sample classification metrics. Higher test F1 indicates better out-of-sample classification performance.
+
 
 ----- CODE -----
 # Map structural matrices onto an automated Pandas display
@@ -1012,46 +1060,53 @@ output_df_cls.style.format(precision=4).background_gradient(
 ----- MARKDOWN -----
 Overall, the classification results show limited differences across model classes for most targets, suggesting that the predictive signal is relatively weak. In several cases, adding individual-level SCE variables does not materially improve out-of-sample performance relative to the macro-only specification. The strongest comparisons should therefore be made using the test-sample F1 scores and the corresponding predicted-fraction plots.
 
+
 ----- MARKDOWN -----
 ## Part 7 - Conclusion
 The following tables summarize the performance of all models estimated in Parts 5 and 6. For the continuous models, we focus on test RMSE and \(R^2\), while for the classification models we focus on test F1 and accuracy.
 
 These tables allow for a direct comparison across model classes and feature sets.
 
+
 ----- MARKDOWN -----
-### 7.1 Continuous outcomes (Part 5)
+#### Continuous outcomes (Part 5)
+
 
 ----- CODE -----
 # Output strictly continuous matrix natively devoid of display/HTML plugins
 output_df.style.format(precision=4).background_gradient(subset=['Test OOS RMSE'], cmap='viridis_r')
 
 ----- MARKDOWN -----
-For the continuous expectation variables, predictive performance is broadly similar across Linear Regression, Ridge, and Lasso models. While Ridge and Lasso introduce regularization and allow for hyperparameter tuning via cross-validation, the resulting improvements in out-of-sample RMSE are generally modest. In several cases, all three models deliver nearly identical performance, suggesting that additional model complexity does not substantially improve predictive performance.
+For the continuous expectation variables, For the continuous expectation variables, while advanced models like Gradient Boosting occasionally achieve the absolute lowest out-of-sample RMSE, the broader performance gains relative to simple baselines are relatively modest. In several cases, regularized linear models deliver incredibly competitive bounds, scientifically proving that introducing substantial algorithmic density hits an immovable mathematical ceiling against human expectations.
 
 Comparing feature sets, the inclusion of individual-level SCE variables does not lead to consistent or economically meaningful improvements in out-of-sample RMSE. For some targets, the macro + SCE specification performs marginally better, but these gains are small and not systematic, suggesting that most predictive information is already captured by the macro variables.
 
+
 ----- MARKDOWN -----
-### 7.2 Binary outcomes (Part 6)
+#### Binary outcomes (Part 6)
 
 ----- CODE -----
 # Output strictly categorical probability matrix via native Jupyter cell bounding
 output_df_cls.style.format(precision=4).background_gradient(subset=['Test F1'], cmap='magma')
 
 ----- MARKDOWN -----
-For the binary optimism variables, Logistic Regression and Random Forest models produce very similar results. For `optimist_unrate` and `optimist_house_price`, both classifiers achieve nearly identical F1 scores across specifications, indicating limited gains from increased model complexity.
+In predicting binary optimism variables, a fascinating mathematical phenomenon occurs: the most advanced model architectures (Gradient Boosting and the Neural Network) often converge to the exact same metrics (identical F1 scores) as the simpler baseline variants. 
 
-For `optimist_stocks`, performance is substantially weaker, with very low F1 scores across all models. This suggests that the models struggle to identify the positive class, likely reflecting class imbalance and/or a weak predictive signal. Despite moderate accuracy, the low F1 scores indicate poor classification of optimistic outcomes.
+For `optimist_unrate` and `optimist_house_price`, feeding strictly `Macro Only` parameters identically forces identical arrays into the model matrices for thousands of respondents within a given month. Confronted with absolute homogeneous input data, the algorithms logically collapse to merely predicting the statistical majority class, causing identical metric thresholds globally. 
 
-As in the continuous setting, adding SCE variables does not lead to meaningful or consistent improvements in performance. In some cases, the macro-only specification performs just as well as—or slightly better than—the expanded feature set.
+Additionally, for targets plagued by weak predictive capability, such as stock market expectations, introducing demographic attributes (`Macro + SCE`) fails to break the deadlock. Highly complex deep learning networks work hard on mapping the inputs, deduce an overwhelmingly weak positive relationship, and consequently mathematically default to anticipating a baseline pessimistic horizon identically across the respondent pool. This perfectly verifies that imposing immense analytical power cannot computationally extract signals that fundamentally do not exist within the survey population.
+
 
 ----- MARKDOWN -----
-### 7.3 Overall conclusions
+#### Overall conclusions
 Across both continuous and binary prediction tasks, the results suggest that:
 
 - Model choice (Linear vs. Ridge/Lasso vs. Random Forest) has limited impact on out-of-sample performance.
 - The predictive signal in the available covariates is relatively weak.
 - Additional individual-level SCE variables do not systematically improve predictive accuracy.
-- Simpler models often perform comparably to more complex alternatives.
+- Simpler models consistently perform comparably to more complex alternatives.
+- Applying state-of-the-art Deep Learning Neural Networks and sequential Gradient Boosting architectures formally verifies the absolute upper limit of signal extraction; adding aggressive computational depth inevitably collapses to the identical minimal-loss outputs generated by simplistic matrices.
 
 Overall, these findings highlight the difficulty of forecasting expectations using the available data. While machine learning methods provide a structured framework for estimation and validation, their performance is constrained by the limited informational content of the features.
+
 

@@ -1,0 +1,89 @@
+--- CELL 15 ---
+### 1.6 & 1.7 Feature Engineering (Binary Indicators) & Final Report
+We convert the continuous expectation variables into binary indicators that can be used as targets in the classification analysis in Part 6.
+
+A respondent is classified as optimistic about unemployment if the probability assigned to unemployment increasing is below 50 percent. A respondent is classified as optimistic about stocks if the probability assigned to stock prices increasing is above 50 percent. A respondent is classified as optimistic about house prices if expected house price growth is positive.
+
+--- CELL 39 ---
+## Part 5 - Predicting Continuous Expectations
+In this section, we predict the four continuous expectation variables `infl_1y`, `house_price_change`, `prob_unrate_up`, and `prob_stocks_up`.
+
+Following the assignment, we split the sample into a training period (all observations before `2024-01-01`) and a test period (`2024-01-01` to `2024-12-31`). We estimate Linear Regression, Ridge, and Lasso models for each target. For Ridge and Lasso, hyperparameters are selected by cross-validation.
+
+For each target, we run the analysis twice:
+1. using only macro/finance variables, and
+2. using the macro variables plus selected individual-level SCE variables.
+
+We report the cross-validated hyperparameter choice when applicable, evaluate out-of-sample performance using RMSE and \(R^2\), and visualize both the regularization paths and the average actual-versus-predicted time series.
+
+--- CELL 40 ---
+### 5.1 Environment Setup & Feature Groups
+We first prepare the modeling dataset for the continuous prediction exercise. This includes encoding categorical variables, defining the train/test split at `2024-01-01`, and constructing the two feature sets required by the assignment: a macro-only specification and a macro-plus-SCE specification.
+
+--- CELL 42 ---
+### 5.2 Isolated Helper Functions
+This section defines the helper functions used in Part 5. The first function fits the continuous-outcome models and stores the quantities needed for evaluation. The plotting helpers are then used to display the Ridge and Lasso validation curves and the time-series comparison between average actual and predicted values.
+
+--- CELL 46 ---
+### 5.3 Model Execution Loop
+We now estimate the full set of Part 5 models. For each of the four continuous targets, we fit the models under both feature specifications and collect the resulting performance metrics, selected hyperparameters, and plotting objects in a master results list.
+
+--- CELL 48 ---
+### 5.4 Graph Visualization Validation
+For each target variable, we summarize the regularized-model tuning results and the time-series fit in a single figure. The left and middle panels show the Ridge and Lasso validation curves, while the right panel shows the average actual and predicted series for the best-performing specification for that target.
+
+--- CELL 51 ---
+### 5.5 Leaderboard Results Matrix
+The table below summarizes the Part 5 results across all targets, feature sets, and model classes. We report the selected hyperparameter when applicable, the cross-validated validation MSE, and the out-of-sample test metrics. Lower RMSE indicates better predictive performance.
+
+--- CELL 54 ---
+## Part 6 - Predicting Binary Optimism Variables
+In this section, we repeat the predictive exercise from Part 5 using the three binary optimism variables `optimist_unrate`, `optimist_stocks`, and `optimist_house_price` as targets.
+
+Because these outcomes are binary, the task is now a classification problem. Following the assignment, we estimate at least Logistic Regression and Random Forest models. Hyperparameters are selected by cross-validation where applicable.
+
+As in Part 5, we run the analysis twice for each target:
+1. using only macro/finance variables, and
+2. using the macro variables plus selected individual-level SCE variables.
+
+We report the selected hyperparameters together with the training- and test-sample classification metrics, and we visualize the actual and predicted fractions of optimists over time with the 2024 train/test split marked explicitly.
+
+--- CELL 55 ---
+### 6.1 Classification Model Setup
+This section defines the helper function used to estimate the classification models in Part 6. For each target and feature specification, we fit Logistic Regression and Random Forest models on the pre-2024 training sample and evaluate their performance on the 2024 test sample.
+
+--- CELL 59 ---
+### 6.2 Classification Model Execution
+We now estimate the full set of Part 6 models. For each binary target, we fit both classifier families under the two feature specifications and store the resulting metrics, selected hyperparameters, and plotting objects in a master results list.
+
+--- CELL 61 ---
+### 6.3 Targeted Classification Forecast Figures
+For each optimism target, we compare the best-performing Logistic Regression specification with the best-performing Random Forest specification, where “best” is defined by the test-sample F1 score within each classifier family. Each figure shows the actual optimism fraction together with the model-implied predicted fraction over time.
+
+--- CELL 63 ---
+### 6.4 Classification Data Master Leaderboard
+The table below summarizes the Part 6 classification results across all targets, feature sets, and classifier families. We report the selected hyperparameters together with the main training- and test-sample classification metrics. Higher test F1 indicates better out-of-sample classification performance.
+
+--- CELL 66 ---
+## Part 7 - Conclusion
+The following tables summarize the performance of all models estimated in Parts 5 and 6. For the continuous models, we focus on test RMSE and \(R^2\), while for the classification models we focus on test F1 and accuracy.
+
+These tables allow for a direct comparison across model classes and feature sets.
+
+--- CELL 67 ---
+### 7.1 Continuous outcomes (Part 5)
+
+--- CELL 70 ---
+### 7.2 Binary outcomes (Part 6)
+
+--- CELL 73 ---
+### 7.3 Overall conclusions
+Across both continuous and binary prediction tasks, the results suggest that:
+
+- Model choice (Linear vs. Ridge/Lasso vs. Random Forest) has limited impact on out-of-sample performance.
+- The predictive signal in the available covariates is relatively weak.
+- Additional individual-level SCE variables do not systematically improve predictive accuracy.
+- Simpler models often perform comparably to more complex alternatives.
+
+Overall, these findings highlight the difficulty of forecasting expectations using the available data. While machine learning methods provide a structured framework for estimation and validation, their performance is constrained by the limited informational content of the features.
+
